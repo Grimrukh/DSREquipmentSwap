@@ -1,0 +1,20 @@
+﻿{
+  "ProcessSearchIntervalMs": 500,
+  "MonitorIntervalMs": 10,
+  "GameLoadedIntervalMs": 200,
+  "SpeffectTriggerCooldownMs": 500,
+
+  "LeftWeaponIDTriggers": [
+    [306000, -6000],
+    [300015, -15]
+  ],
+  "RightWeaponIDTriggers": [
+    [306000, 5]
+  ],
+  "LeftSpEffectTriggers": [
+    [2200, -1]
+  ],
+  "RightSpEffectTriggers": [
+    [2200, 1]
+  ]
+}
