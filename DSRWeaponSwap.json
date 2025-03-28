@@ -1,20 +1,21 @@
 ﻿{
+  "ProcessSearchTimeoutMs": 3600000,
   "ProcessSearchIntervalMs": 500,
   "MonitorIntervalMs": 10,
   "GameLoadedIntervalMs": 200,
-  "SpeffectTriggerCooldownMs": 500,
+  "SpEffectTriggerCooldownMs": 500,
 
   "LeftWeaponIDTriggers": [
-    [306000, -6000],
-    [300015, -15]
+    [306000, -6000, false],
+    [300015, -15, false]
   ],
   "RightWeaponIDTriggers": [
-    [306000, 5]
+    [306000, 5, true]
   ],
   "LeftSpEffectTriggers": [
-    [2200, -1]
+    [2200, -1, false]
   ],
   "RightSpEffectTriggers": [
-    [2200, 1]
+    [2200, 1, false]
   ]
 }

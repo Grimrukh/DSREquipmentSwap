@@ -1,413 +1,335 @@
-﻿#include <fstream>
+﻿#include <filesystem>
+#include <format>
+#include <memory>
 #include <thread>
 
-#include "GrimHook/logging.h"
-#include "GrimHook/process.h"
-
-#include "GrimHookDSR/DSRHook.h"
-#include "GrimHookDSR/DSREnums.h"
-
+#include "Firelink/Logging.h"
+#include "Firelink/Process.h"
+#include "FirelinkDSR/DSRHook.h"
+#include "FirelinkDSR/DSREnums.h"
 #include "nlohmann/json.hpp"
-#include "DSRWeaponSwap/EquipmentSwap.h"
 
-#pragma comment(lib, "GrimHookDSR.lib")
+#include "SwapConfig.h"
+#include "EquipmentSwap.h"
+
+#pragma comment(lib, "FirelinkDSR.lib")
 
 using namespace std;
-using namespace GrimHook;
-using Json = nlohmann::json;
+using std::filesystem::path;
+
+using namespace Firelink;
+using namespace FirelinkDSR;
+using namespace DSRWeaponSwap;
+using namespace DSRWeaponSwap;
 
 
-const wstring JSON_FILE_PATH = L"DSRWeaponSwap.json";
-
-
-namespace
+EquipmentSwapper::~EquipmentSwapper()
 {
-    thread SWAP_THREAD;
-    atomic STOP_FLAG(false);
+    if (m_thread)
+        StopThreaded();
+}
 
-    typedef struct JsonConfig
+void EquipmentSwapper::StartThreaded()
+{
+    m_thread = thread([this]{ Run(); });
+}
+
+void EquipmentSwapper::StopThreaded()
+{
+    if (!m_thread)
+        throw std::runtime_error("EquipmentSwapper thread not started. Cannot stop it.");
+    m_stopFlag = true;
+    m_thread->join();
+}
+
+void EquipmentSwapper::Run()
+{
+    // Do initial DSR process search.
+    unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
+        DSR_PROCESS_NAME, m_config.processSearchTimeoutMs, m_config.processSearchIntervalMs, m_stopFlag);
+
+    if (!newProcess || m_stopFlag.load())
+        return;
+
+    // Our DSRHook is the sole owner of the process for this application.
+    m_dsrHook = make_unique<DSRHook>(move(newProcess));
+
+    // Handed dictionaries containing countdown timers for re-checking triggered SpEffect IDs.
+    map<int, int> leftSpEffectTimers;
+    for (const SpEffectSwapTrigger& swapTrigger : m_config.leftSpEffectTriggers)
+        leftSpEffectTimers[swapTrigger.spEffectId] = 0;
+
+    map<int, int> rightSpEffectTimers;
+    for (const SpEffectSwapTrigger& swapTrigger : m_config.rightSpEffectTriggers)
+        rightSpEffectTimers[swapTrigger.spEffectId] = 0;
+
+    // Monitor triggers.
+    Info("Starting Weapon/SpEffect trigger monitor loop.");
+    while (true)
     {
-        int processSearchIntervalMs = 500;
-        int monitorIntervalMs = 10;
-        int gameLoadedIntervalMs = 200;
-        int speffectTriggerCooldownMs = 500;
-        vector<pair<int, int>> leftWeaponIdTriggers = {};
-        vector<pair<int, int>> rightWeaponIdTriggers = {};
-        vector<pair<int, int>> leftSpEffectTriggers = {};
-        vector<pair<int, int>> rightSpEffectTriggers = {};
-    } JsonConfig;
-    
-    // Function to parse JSON
-    bool ParseTriggerJson(const wstring& filePath, JsonConfig& config)
-    {
-        // Step 1: Open the JSON file
-        ifstream jsonFile(filePath.c_str());
-        if (!jsonFile.is_open())
-        {
-            Error(L"Failed to open JSON file: " + filePath);
-            return false;
-        }
+        if (m_stopFlag.load())
+            break;
 
-        // Step 2: Parse the JSON into a nlohmann::json object
-        Json jsonObject;
-        try
-        {
-            jsonFile >> jsonObject;
-        }
-        catch (const Json::parse_error& e)
-        {
-            Error("JSON parse error: " + string(e.what()));
-            return false;
-        }
+        if (!ValidateHook())
+            continue;  // try again (appropriate sleep already done)
 
-        vector<string> foundKeys = {};
+        // Update temporary swaps by checking current weapons (we don't force-revert).
+        CheckTempWeaponSwaps(false);
 
-        // Step 3: Helper lambdas
-        
-        auto extractTriggers = [&foundKeys](const Json& obj, const string& key, vector<pair<int, int>>& triggerList)
-        {
-            if (obj.contains(key))
-            {
-                for (const auto& pair : obj[key])
-                {
-                    if (pair.size() == 2)
-                    {
-                        triggerList.emplace_back(pair[0], pair[1]);
-                        foundKeys.push_back(key);
-                    }
-                    else
-                    {
-                        Error("Invalid pair size in " + key + ".");
-                        return false;
-                    }
-                }
-            }
-            // trigger type omitted (no triggers)
-            return true;
-        };
+        // WEAPONS: We check and replace primary AND secondary weapons per hand.
+        CheckHandedWeaponSwapTriggers(m_config.leftWeaponIdTriggers, true);
+        CheckHandedWeaponSwapTriggers(m_config.rightWeaponIdTriggers, false);
 
-        auto extractSetting = [&foundKeys](const Json& obj, const string& key, int& setting)
-        {
-            if (obj.contains(key))
-            {
-                try
-                {
-                    setting = obj[key].get<int>();  // Extract as integer
-                    foundKeys.push_back(key);
-                }
-                catch (const Json::exception& e)
-                {
-                    Error("Invalid value type for key: " + key + ". Expected an integer. JSON error: " + string(e.what()));
-                    return false;
-                }
-            }
-            // key omitted (default value)
-            return true;
-        };
+        // SP EFFECT triggers: always act on CURRENT weapon in appropriate hand.
+        CheckHandedSpEffectSwapTriggers(m_config.leftSpEffectTriggers, leftSpEffectTimers, true);
+        CheckHandedSpEffectSwapTriggers(m_config.rightSpEffectTriggers, rightSpEffectTimers, false);
 
-        // Step 4.1: Extract integer settings
-        if (!extractSetting(jsonObject, "ProcessSearchIntervalMs", config.processSearchIntervalMs) ||
-            !extractSetting(jsonObject, "MonitorIntervalMs", config.monitorIntervalMs) ||
-            !extractSetting(jsonObject, "GameLoadedIntervalMs", config.gameLoadedIntervalMs) ||
-            !extractSetting(jsonObject, "SpeffectTriggerCooldownMs", config.speffectTriggerCooldownMs))
-        {
-            return false;
-        }
+        // Update cooldown timers for SpEffect triggers.
+        DecrementSpEffectTimers(leftSpEffectTimers);
+        DecrementSpEffectTimers(rightSpEffectTimers);
 
-        // Step 4.2: Extract all four triggers
-        if (!extractTriggers(jsonObject, "LeftWeaponIDTriggers", config.leftWeaponIdTriggers) ||
-            !extractTriggers(jsonObject, "RightWeaponIDTriggers", config.rightWeaponIdTriggers) ||
-            !extractTriggers(jsonObject, "LeftSpEffectTriggers", config.leftSpEffectTriggers) ||
-            !extractTriggers(jsonObject, "RightSpEffectTriggers", config.rightSpEffectTriggers))
-        {
-            return false;
-        }
-
-        // Step 5: make sure no other keys are present
-        for (const auto& [key, value] : jsonObject.items())
-        {
-            if (find(foundKeys.begin(), foundKeys.end(), key) == foundKeys.end())
-            {
-                Error("Unrecognized key in JSON: " + key);
-                return false;
-            }
-        }
-
-        return true;  // Parsing successful
+        // Sleep for refresh interval:
+        this_thread::sleep_for(chrono::milliseconds(m_config.monitorIntervalMs));
     }
-    
-    void LogTriggers(const vector<pair<int, int>>& triggers, const wstring& label)
+}
+
+
+bool EquipmentSwapper::ValidateHook()
+{
+    if (const shared_ptr<ManagedProcess> dsrProcess = m_dsrHook->GetProcess();
+        !dsrProcess->IsHandleValid() || dsrProcess->IsProcessTerminated())
     {
-        // Log all triggers (INFO) with the given `label`.
-        
-        for (const auto& [trigger, offset] : triggers)
-        {
-            wstring arrow = offset >= 0 ? L" -> +" : L" -> ";
-            wstring msg = label;
-            msg.append(L" -- ");
-            msg.append(to_wstring(trigger));
-            msg.append(arrow);
-            msg.append(to_wstring(offset));
-            Info(msg);
-        }
+        // Lost the process (invalid handle or terminated). We find a new process instance and reset the hook.
+
+        // Release hook of stale process (will also release process if last reference).
+        m_dsrHook.reset();
+
+        // Find again with blocking call.
+        Warning("Lost DSR process handle. Searching again...");
+        unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
+            DSR_PROCESS_NAME, m_config.processSearchTimeoutMs, m_config.processSearchIntervalMs, m_stopFlag);
+
+        // Pass ownership `newProcess` to a new `DSRHook` instance (sole owner).
+        m_dsrHook = make_unique<DSRHook>(move(newProcess));
     }
 
-    void WaitForWindow(ManagedProcess*& process, const int refreshIntervalMs)
+    // Update `m_gameLoaded` state.
+    if (!m_dsrHook->IsGameLoaded())
     {
-        Info(L"Searching for process with name: " + DSRHook::processName);
-    
-        while (true)
+        if (m_gameLoaded)
         {
-            if (STOP_FLAG.load())
-                return;
-            
-            if (ManagedProcess::findProcessByName(DSRHook::processName, process))
-            {
-                if (process)
-                {
-                    Info("Process found!");
-                    return;
-                }
-                Warning("Process not found. Retrying in " + to_string(refreshIntervalMs) + " ms...");
-            }
-            else
-            {
-                Error("Error occurred during process search.");
-                break;
-            }
-            this_thread::sleep_for(chrono::milliseconds(refreshIntervalMs));
+            m_gameLoaded = false;
+            Warning(format("Game is not loaded. Checking again every {} ms...", m_config.gameLoadedIntervalMs));
         }
+        this_thread::sleep_for(chrono::milliseconds(m_config.gameLoadedIntervalMs));
+        return false;  // do not check triggers
     }
 
-    // Returns `true` if we should continue to check ID triggers.
-    bool ValidateHook(ManagedProcess*& dsrProcess, DSRHook*& dsrHook, bool& gameLoaded, const JsonConfig& config)
+    if (!m_gameLoaded)
     {
-        if (!dsrProcess->isHandleValid() || dsrProcess->isProcessTerminated())
-        {
-            // Lost the process.
-            delete dsrHook;  // does NOT manage process handle
-            delete dsrProcess;
-
-            // Find again...
-            Warning("Lost DSR process handle. Searching again...");
-            while (true)
-            {
-                if (STOP_FLAG.load())
-                    break;
-                
-                WaitForWindow(dsrProcess, config.processSearchIntervalMs);
-                if (dsrProcess)
-                    break;
-
-                // Should not be reachable.
-                Warning(L"DSR process search failed. Trying again in " + to_wstring(config.processSearchIntervalMs) + L" ms...");
-                this_thread::sleep_for(chrono::milliseconds(config.processSearchIntervalMs));
-            }
-            dsrHook = new DSRHook(dsrProcess);
-        }
-
-        if (!dsrHook->isGameLoaded())
-        {
-            if (gameLoaded)
-            {
-                gameLoaded = false;
-                Warning(L"Game is not loaded. Checking again every " + to_wstring(config.gameLoadedIntervalMs) + L" ms...");
-            }
-            this_thread::sleep_for(chrono::milliseconds(config.gameLoadedIntervalMs));
-            return false;  // do not check triggers
-        }
-
-        if (!gameLoaded)
-        {
-            gameLoaded = true;
-            Info("Game is loaded. Monitoring weapon swap triggers...");
-        }
-
-        return true;
+        m_gameLoaded = true;
+        // Game has been (re)-loaded. Any temporary weapon swaps need to be undone (forced revert).
+        CheckTempWeaponSwaps(true);
+        Info("Game is loaded. Monitoring weapon swap triggers...");
     }
 
-    void DoSwapThread()
+    return true;
+}
+
+void EquipmentSwapper::CheckHandedWeaponSwapTriggers(
+    const std::vector<WeaponIDSwapTrigger>& triggers,
+    const bool isLeftHand) const
+{
+    for (const WeaponIDSwapTrigger& swapTrigger : triggers)
     {
-        JsonConfig config;
-
-        if (!ParseTriggerJson(JSON_FILE_PATH, config))
+        // Iterate over PRIMARY and SECONDARY slots:
+        for (const WeaponSlot slot : { WeaponSlot::PRIMARY, WeaponSlot::SECONDARY })
         {
-            Error(L"Failed to parse JSON file: " + JSON_FILE_PATH);
-            return;
-        }
-
-        Info(L"Loaded settings and weapon swap triggers from " + JSON_FILE_PATH);
-    
-        Info(L"Process search interval: " + to_wstring(config.processSearchIntervalMs) + L" ms");
-        Info(L"Monitor interval: " + to_wstring(config.monitorIntervalMs) + L" ms");
-        Info(L"Game loaded interval: " + to_wstring(config.gameLoadedIntervalMs) + L" ms");
-        Info(L"SpEffect trigger cooldown: " + to_wstring(config.speffectTriggerCooldownMs) + L" ms");
-
-        LogTriggers(config.leftWeaponIdTriggers, L"Left-Hand Weapon ID Trigger");
-        LogTriggers(config.rightWeaponIdTriggers, L"Right-Hand Weapon ID Trigger");
-        LogTriggers(config.leftSpEffectTriggers, L"Left-Hand SpEffect ID Trigger");
-        LogTriggers(config.rightSpEffectTriggers, L"Right-Hand SpEffect ID Trigger");
-
-        ManagedProcess* dsrProcess = nullptr;
-
-        // Do initial DSR process search.
-        while (true)
-        {
-            if (STOP_FLAG.load())
-                break;
-            
-            // Blocks and keeps looking for PROCESS_NAME.
-            WaitForWindow(dsrProcess, config.processSearchIntervalMs);
-
-            if (dsrProcess)
-                break;
-
-            // Should not be reachable.
-            Warning(L"DSR process search failed. Trying again in " + to_wstring(config.processSearchIntervalMs) + L" ms...");
-            this_thread::sleep_for(chrono::milliseconds(config.processSearchIntervalMs));
-        }
-
-        if (!dsrProcess || STOP_FLAG.load())
-            return;
-
-        auto dsrHook = new DSRHook(dsrProcess);
-
-        // Dictionary containing countdown timers for re-checking triggered SpEffect IDs:
-        map<int, int> leftSpEffectTimers;
-        for (const auto& [spEffectID, offset] : config.leftSpEffectTriggers)
-        {
-            leftSpEffectTimers[spEffectID] = 0;
-        }
-
-        map<int, int> rightSpEffectTimers;
-        for (const auto& [spEffectID, offset] : config.rightSpEffectTriggers)
-        {
-            rightSpEffectTimers[spEffectID] = 0;
-        }
-
-        bool gameLoaded = true;  // assume true to start
-
-        // Monitor triggers.
-        Info("Starting Weapon/SpEffect trigger monitor loop.");
-        while (true)
-        {
-            if (STOP_FLAG.load())
-                break;
-            
-            if (!ValidateHook(dsrProcess, dsrHook, gameLoaded, config))
-                continue;  // try again (appropriate sleep already done)
-
-            // WEAPONS: We check and replace primary AND secondary weapons per hand.
-
-            // Left-hand:
-            for (const auto& [trigger, offset] : config.leftWeaponIdTriggers)
+            if (const int currentWeaponId = m_dsrHook->GetWeapon(slot, isLeftHand);
+                currentWeaponId == swapTrigger.weaponId)
             {
-                // Iterate over PRIMARY and SECONDARY slots:
-                for (WeaponSlot slot : { PRIMARY, SECONDARY })
-                {
-                    int currentWeaponId = dsrHook->getLeftHandWeapon(slot);
-                    if (currentWeaponId == trigger)
-                    {
-                        int newWeaponId = currentWeaponId + offset;
-                        dsrHook->setLeftHandWeapon(slot, newWeaponId);
-                        Info("Left-hand weapon ID trigger: " + to_string(trigger) + " -> " + to_string(offset));
-                    }
-                }
+                if (!m_dsrHook->SetWeapon(slot, currentWeaponId + swapTrigger.weaponIdOffset, isLeftHand))
+                    Error(format(
+                        "{}-hand weapon ID trigger failed: {}",
+                        isLeftHand ? "Left" : "Right",
+                        swapTrigger.ToString()));
+                else
+                    Info(format(
+                        "{}-hand weapon ID trigger succeeded: {}",
+                        isLeftHand ? "Left" : "Right",
+                        swapTrigger.ToString()));
             }
-
-            // Right-hand:
-            for (const auto& [trigger, offset] : config.rightWeaponIdTriggers)
-            {
-                // Iterate over PRIMARY and SECONDARY slots:
-                for (const WeaponSlot slot : { PRIMARY, SECONDARY })
-                {
-                    if (const int currentWeaponId = dsrHook->getRightHandWeapon(slot); currentWeaponId == trigger)
-                    {
-                        const int newWeaponId = currentWeaponId + offset;
-                        dsrHook->setRightHandWeapon(slot, newWeaponId);
-                        Info("Right-hand weapon ID trigger: " + to_string(trigger) + " -> " + to_string(offset));
-                    }
-                }
-            }
-
-            // SP EFFECT triggers: always act on CURRENT weapon in appropriate hand.
-
-            // Left-hand:
-            for (const auto& [trigger, offset] : config.leftSpEffectTriggers)
-            {
-                if (leftSpEffectTimers[trigger] > 0)
-                {
-                    // Skip this trigger until timer expires:
-                    continue;
-                }
-
-                if (dsrHook->playerHasSpEffect(trigger))
-                {
-                    Info("Left-hand SpEffect trigger: " + to_string(trigger) + " -> " + to_string(offset));
-                    const int currentWeaponId = dsrHook->getLeftHandWeapon(CURRENT);
-                    dsrHook->setLeftHandWeapon(CURRENT, currentWeaponId + offset);
-
-                    // Start timer:
-                    leftSpEffectTimers[trigger] = config.speffectTriggerCooldownMs;
-                }
-            }
-
-            // Right-hand:
-            for (const auto& [trigger, offset] : config.rightSpEffectTriggers)
-            {
-                if (rightSpEffectTimers[trigger] > 0)
-                {
-                    // Skip this trigger until timer expires:
-                    continue;
-                }
-
-                if (dsrHook->playerHasSpEffect(trigger))
-                {
-                    Info("Right-hand SpEffect trigger: " + to_string(trigger) + " -> " + to_string(offset));
-                    const int currentWeaponId = dsrHook->getRightHandWeapon(CURRENT);
-                    dsrHook->setRightHandWeapon(CURRENT, currentWeaponId + offset);
-
-                    // Start timer:
-                    rightSpEffectTimers[trigger] = config.speffectTriggerCooldownMs;
-                }
-            }
-
-            // Decrement each timer countdown by monitor refresh interval:
-            for (auto& [spEffectID, timer] : leftSpEffectTimers)
-            {
-                timer -= config.monitorIntervalMs;
-                if (timer <= 0)
-                    timer = 0;
-            }
-
-            for (auto& [spEffectID, timer] : rightSpEffectTimers)
-            {
-                timer -= config.monitorIntervalMs;
-                if (timer <= 0)
-                    timer = 0;
-            }
-
-            // Sleep for refresh interval:
-            this_thread::sleep_for(chrono::milliseconds(config.monitorIntervalMs));
         }
     }
 }
 
-void DSRWeaponSwap::StartSwapThread()
+
+void EquipmentSwapper::CheckHandedSpEffectSwapTriggers(
+    const std::vector<SpEffectSwapTrigger>& triggers,
+    std::map<int, int>& timers,
+    const bool isLeftHand)
 {
-    // Reset stop flag.
-    STOP_FLAG.store(false);
-    // Run the main swap thread.
-    SWAP_THREAD = thread(DoSwapThread);
+    for (const SpEffectSwapTrigger& swapTrigger : triggers)
+    {
+        if (timers[swapTrigger.spEffectId] > 0)
+        {
+            // This SpEffect ID trigger is still on cooldown. Skip it.
+            continue;
+        }
+
+        if (m_dsrHook->PlayerHasSpEffect(swapTrigger.spEffectId))
+        {
+            const WeaponSlot currentSlot = m_dsrHook->GetWeaponSlot(isLeftHand);
+            const int currentWeaponId = m_dsrHook->GetWeapon(currentSlot, isLeftHand);
+            const int newWeaponId = currentWeaponId + swapTrigger.weaponIdOffset;
+
+            if (!m_dsrHook->SetWeapon(currentSlot, newWeaponId, isLeftHand))
+            {
+                Error(format(
+                    "{}-hand SpEffect trigger failed: {}",
+                    isLeftHand ? "Left" : "Right",
+                    swapTrigger.ToString()));
+                continue;
+            }
+
+            Info(format(
+                "{}-hand SpEffect trigger succeeded: {}",
+                isLeftHand ? "Left" : "Right",
+                swapTrigger.ToString()));
+
+            // Start timer.
+            timers[swapTrigger.spEffectId] = m_config.spEffectTriggerCooldownMs;
+
+            if (!swapTrigger.isPermanent)
+            {
+                // Record new to old weapon ID mapping. This may replace an existing temporary swap, which we discard.
+                m_tempSwapState.SetHandTempSwap(currentWeaponId, newWeaponId, currentSlot, isLeftHand);
+                Info(format("Recording temporary weapon {}-hand swap: {} -> {}",
+                    isLeftHand ? "Left" : "Right", currentWeaponId, newWeaponId));
+            }
+        }
+    }
 }
 
-void DSRWeaponSwap::StopSwapThread()
+void EquipmentSwapper::CheckTempWeaponSwaps(const bool forceRevert)
 {
-    if (SWAP_THREAD.joinable())
+    // We need all four equipped weapon IDs on top of knowing which slot is current, so we can validate the weapon
+    // before reverting it.
+    const int newPrimaryLeft = m_dsrHook->GetWeapon(WeaponSlot::PRIMARY, true);
+    const int newPrimaryRight = m_dsrHook->GetWeapon(WeaponSlot::PRIMARY, false);
+    const int newSecondaryLeft = m_dsrHook->GetWeapon(WeaponSlot::SECONDARY, true);
+    const int newSecondaryRight = m_dsrHook->GetWeapon(WeaponSlot::SECONDARY, false);
+    const WeaponSlot currentLeftSlot = m_dsrHook->GetWeaponSlot(true);
+    const WeaponSlot currentRightSlot = m_dsrHook->GetWeaponSlot(false);
+
+    const int newCurrentLeft = currentLeftSlot == WeaponSlot::PRIMARY ? newPrimaryLeft : newSecondaryLeft;
+    const int newCurrentRight = currentRightSlot == WeaponSlot::PRIMARY ? newPrimaryRight : newSecondaryRight;
+
+    if (forceRevert && !m_tempSwapState.HasHandTempSwap(true) && !m_tempSwapState.HasHandTempSwap(false))
     {
-        // Set stop flag. This is checked at the start of all `while (true)` loops in the swap monitor.
-        STOP_FLAG.store(true);
-        // Join the swap thread.
-        SWAP_THREAD.join();
+        // Report that we're forcing a revert but there are no temporary swaps to revert, for clarity.
+        Info("No temporary weapon swaps to forcibly revert.");
     }
+
+    if (m_tempSwapState.HasHandTempSwap(true) && forceRevert)
+    {
+        Info(format("Reverting left weapon {} to {} (forced).",
+                newCurrentLeft, newPrimaryLeft));
+        RevertTempWeaponSwap(true);
+        m_tempSwapState.ClearHandTempSwap(true);
+    }
+    else if (m_tempSwapState.HasHandTempSwapExpired(currentLeftSlot, true))
+    {
+        // Active temporary left-hand swap is no longer valid. Find and revert it.
+        Info(format("Reverting left weapon {} to {} (current weapon changed to {}).",
+            newCurrentLeft, newPrimaryLeft, newCurrentLeft));
+        RevertTempWeaponSwap(true);
+        m_tempSwapState.ClearHandTempSwap(true);
+    }
+
+    if (m_tempSwapState.HasHandTempSwap(false) && forceRevert)
+    {
+        Info(format("Reverting right weapon {} to {} (forced).",
+                newCurrentRight, newPrimaryRight));
+        RevertTempWeaponSwap(false);
+        m_tempSwapState.ClearHandTempSwap(false);
+    }
+    else if (m_tempSwapState.HasHandTempSwapExpired(currentRightSlot, false))
+    {
+        // Active temporary right-hand swap is no longer valid. Find and revert it.
+        Info(format("Reverting right weapon {} to {} (current weapon changed to {}).",
+            newCurrentRight, newPrimaryRight, newCurrentRight));
+        RevertTempWeaponSwap(false);
+        m_tempSwapState.ClearHandTempSwap(false);
+    }
+
+    // Update last current slots.
+    m_tempSwapState.SetLastHandSlots(currentLeftSlot, currentRightSlot);
+}
+
+
+void EquipmentSwapper::RevertTempWeaponSwap(const bool isLeftHand) const
+{
+    const string hand = isLeftHand ? "Left" : "Right";
+
+    optional<TempSwapState::TempSwap> swap = m_tempSwapState.GetHandTempSwap(isLeftHand);
+    if (!swap.has_value())
+    {
+        Error("Tried to revert temporary weapon swap that does not exist.");
+        return;
+    }
+
+    string slotName = swap->slot == WeaponSlot::PRIMARY ? "primary" : "secondary";
+
+    // Check that the expected temporary weapon ID is still in the slot.
+    if (m_dsrHook->GetWeapon(swap->slot, isLeftHand) != swap->destWeaponId)
+    {
+        Error(format(
+            "Weapon in {}-hand {} slot is not the expected temporary weapon ID {}. Cannot revert swap.",
+            hand, slotName, swap->destWeaponId));
+        return;
+    }
+
+    if (!m_dsrHook->SetWeapon(WeaponSlot::PRIMARY, swap->sourceWeaponId, isLeftHand))
+        Error(format("Failed to revert {}-hand temporary {} weapon {} to {}.",
+            hand, slotName, swap->destWeaponId, swap->sourceWeaponId));
+    else
+        Info(format("Reverted {}-hand temporary {} weapon {} to {}.",
+            hand, slotName, swap->destWeaponId, swap->sourceWeaponId));
+}
+
+
+void EquipmentSwapper::DecrementSpEffectTimers(std::map<int, int>& timers) const
+{
+    // Decrement each timer countdown by monitor refresh interval:
+    for (int& timer: timers | views::values)
+    {
+        timer -= m_config.monitorIntervalMs;
+        if (timer <= 0)
+            timer = 0;
+    }
+}
+
+
+EquipmentSwapperConfig EquipmentSwapper::LoadConfig(const path& jsonConfigPath)
+{
+    // Load config from JSON and log settings.
+    EquipmentSwapperConfig config;
+    if (!ParseTriggerJson(jsonConfigPath, config))
+    {
+        Error(format("Failed to parse JSON file: {}", jsonConfigPath.string()));
+        return {};
+    }
+    Info(format("Loaded settings and weapon swap triggers from file: {}", jsonConfigPath.string()));
+    Info(format("Process search timeout: {} ms", config.processSearchTimeoutMs));
+    Info(format("Process search interval: {} ms", config.processSearchIntervalMs));
+    Info(format("Monitor interval: {} ms", config.monitorIntervalMs));
+    Info(format("Game loaded interval: {} ms", config.gameLoadedIntervalMs));
+    Info(format("SpEffect trigger cooldown: {} ms", config.spEffectTriggerCooldownMs));
+    LogTriggers(config.leftWeaponIdTriggers, "Left-Hand Weapon ID Trigger");
+    LogTriggers(config.rightWeaponIdTriggers, "Right-Hand Weapon ID Trigger");
+    LogTriggers(config.leftSpEffectTriggers, "Left-Hand SpEffect ID Trigger");
+    LogTriggers(config.rightSpEffectTriggers, "Right-Hand SpEffect ID Trigger");
+
+    return config;
 }
