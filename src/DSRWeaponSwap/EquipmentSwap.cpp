@@ -57,25 +57,21 @@ void EquipmentSwapper::Run()
     m_dsrHook = make_unique<DSRHook>(move(newProcess));
 
     m_connectedPlayers = vector<DSRPlayer>();
-    m_connectedPlayers.reserve(4);  // reserve space for 4 players
+    m_connectedPlayers.reserve(8);
 
     // Handed dictionaries containing countdown timers for re-checking triggered SpEffect IDs.
-    array<map<int, int>, 4> leftSpEffectTimers;
+    array<map<int, int>, 8> leftSpEffectTimers;
     for (const SpEffectSwapTrigger& swapTrigger : m_config.leftSpEffectTriggers)
     {
-        for (int i = 0; i < 4; ++i)  // 4 slots for left hand
-        {
+        for (int i = 0; i < 8; ++i)
             leftSpEffectTimers[i][swapTrigger.spEffectId] = 0;
-        }
     }
 
-    array<map<int, int>, 4> rightSpEffectTimers;
+    array<map<int, int>, 8> rightSpEffectTimers;
     for (const SpEffectSwapTrigger& swapTrigger : m_config.rightSpEffectTriggers)
     {
-        for (int i = 0; i < 4; ++i)  // 4 slots for right hand
-        {
+        for (int i = 0; i < 8; ++i)
             rightSpEffectTimers[i][swapTrigger.spEffectId] = 0;
-        }
     }
 
     // Monitor triggers.
@@ -94,6 +90,8 @@ void EquipmentSwapper::Run()
         {
             // If we have a valid PlayerIns pointer, set it as the host or client player instance.
             const DSRPlayer& player = m_connectedPlayers.at(i);
+            map<int, int>& leftTimers = leftSpEffectTimers.at(i);
+            map<int, int>& rightTimers = rightSpEffectTimers.at(i);
 
             // Update temporary swaps by checking current weapons (we don't force-revert).
             CheckTempWeaponSwaps(player, false);
@@ -103,12 +101,12 @@ void EquipmentSwapper::Run()
             CheckHandedWeaponSwapTriggers(player, m_config.rightWeaponIdTriggers, false);
 
             // SP EFFECT triggers: always act on CURRENT weapon in appropriate hand.
-            CheckHandedSpEffectSwapTriggers(player, m_config.leftSpEffectTriggers, leftSpEffectTimers.at(i), true);
-            CheckHandedSpEffectSwapTriggers(player, m_config.rightSpEffectTriggers, rightSpEffectTimers.at(i), false);
+            CheckHandedSpEffectSwapTriggers(player, m_config.leftSpEffectTriggers, leftTimers, true);
+            CheckHandedSpEffectSwapTriggers(player, m_config.rightSpEffectTriggers, rightTimers, false);
 
             // Update cooldown timers for SpEffect triggers.
-            DecrementSpEffectTimers(leftSpEffectTimers.at(i));
-            DecrementSpEffectTimers(rightSpEffectTimers.at(i));
+            DecrementSpEffectTimers(leftTimers);
+            DecrementSpEffectTimers(rightTimers);
         }
 
         // Sleep for refresh interval:
@@ -153,7 +151,7 @@ bool EquipmentSwapper::ValidateHook()
         m_gameLoaded = true;
         // Game has been (re)-loaded. Any temporary weapon swaps need to be undone (forced revert).
         UpdateConnectedPlayers();
-        for (const DSRPlayer player : m_connectedPlayers)
+        for (const DSRPlayer& player : m_connectedPlayers)
             CheckTempWeaponSwaps(player, true);
         Info("Game is loaded. Monitoring weapon swap triggers...");
     }
@@ -172,7 +170,7 @@ void EquipmentSwapper::UpdateConnectedPlayers()
     if (chrSlotArray.IsNull())
         return;  // no connected players
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 8; ++i)
     {
         // Read the PlayerIns pointer for each ChrSlot (0x38 size).
         BasePointer playerInsPtr = chrSlotArray.ReadPointer("ChrSlot", i * 0x38);
