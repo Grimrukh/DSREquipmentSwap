@@ -6,11 +6,11 @@
   "SpEffectTriggerCooldownMs": 500,
 
   "LeftWeaponIDTriggers": [
-    [306000, -6000, false],
-    [300015, -15, false]
+    [306000, -6000],
+    [300015, -15]
   ],
   "RightWeaponIDTriggers": [
-    [306000, 5, true]
+    [306000, 5]
   ],
   "LeftSpEffectTriggers": [
     [2200, -1, false]

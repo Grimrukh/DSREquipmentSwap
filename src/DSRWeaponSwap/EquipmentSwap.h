@@ -11,6 +11,7 @@
 
 #include "EquipmentSwap.h"
 #include "SwapConfig.h"
+#include "FirelinkDSR/DSRPlayer.h"
 
 namespace DSRWeaponSwap
 {
@@ -34,9 +35,12 @@ namespace DSRWeaponSwap
         void Run();
 
         /// @brief Read and return config from JSON.
-        static EquipmentSwapperConfig LoadConfig(const std::filesystem::path& jsonConfigPath);
+        static bool LoadConfig(const std::filesystem::path& jsonConfigPath, EquipmentSwapperConfig& config);
 
     private:
+
+        /// @brief List of connected players (`PlayerIns` wrappers) in the game. Updated on every loop iteration.
+        std::vector<FirelinkDSR::DSRPlayer> m_connectedPlayers;
 
         /// @brief
         /// Stored state about current weapon slot active in each hand, to reset temporary swaps.
@@ -115,13 +119,19 @@ namespace DSRWeaponSwap
         /// @brief Called on each loop update to ensure the hooked process is still valid and running.
         bool ValidateHook();
 
+        /// @brief Collect all connected players' `PlayerIns` pointers (up to 4).
+        /// Of course, the first will point right back to the parent host PlayerIns.
+        void UpdateConnectedPlayers();
+
         /// @brief Process any weapon ID triggers in the given hand.
-        void CheckHandedWeaponSwapTriggers(
+        static void CheckHandedWeaponSwapTriggers(
+            const FirelinkDSR::DSRPlayer& player,
             const std::vector<WeaponIDSwapTrigger>& triggers,
-            bool isLeftHand) const;
+            bool isLeftHand);
 
         /// @brief Process any SpEffect ID triggers in the given hand.
         void CheckHandedSpEffectSwapTriggers(
+            const FirelinkDSR::DSRPlayer& player,
             const std::vector<SpEffectSwapTrigger>& triggers,
             std::map<int, int>& timers,
             bool isLeftHand);
@@ -129,11 +139,15 @@ namespace DSRWeaponSwap
         /// @brief Update left/right hand current weapons and Undo any temporary weapon swaps that are unequipped.
         /// Temporary SpEffect-triggered weapon swaps are only maintained as long as they remain the current weapon and
         /// the game isn't unloaded.
-        void CheckTempWeaponSwaps(bool forceRevert);
+        void CheckTempWeaponSwaps(
+            const FirelinkDSR::DSRPlayer& player,
+            bool forceRevert);
 
         /// @brief Checks that `postSwapWeapon` is equipped in the given `slot` for given hand and reverts it to
         /// `preSwapWeapon`.
-        void RevertTempWeaponSwap(bool isLeftHand) const;
+        void RevertTempWeaponSwap(
+            const FirelinkDSR::DSRPlayer& player,
+            bool isLeftHand) const;
 
         /// @brief Decrement SpEffect trigger cooldown timers.
         void DecrementSpEffectTimers(std::map<int, int>& timers) const;

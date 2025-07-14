@@ -1,7 +1,7 @@
 ﻿#include "pch.h"
 
-#include "Firelink/Logging.h"
 #include "DSRWeaponSwap/EquipmentSwap.h"
+#include "Firelink/Logging.h"
 
 using std::filesystem::path;
 using DSRWeaponSwap::EquipmentSwapper;
@@ -38,7 +38,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
             Firelink::Info("DSRWeaponSwap DLL loaded. Starting weapon swap trigger monitor.");
 
-            EquipmentSwapperConfig config = EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH);
+            EquipmentSwapperConfig config;
+            if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))
+            {
+                Firelink::Error("Failed to load configuration. Exiting...");
+                return FALSE;  // Exit if config loading failed.
+            }
             equipmentSwapper = std::make_unique<EquipmentSwapper>(config);
             equipmentSwapper->StartThreaded();
             break;

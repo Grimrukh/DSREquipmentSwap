@@ -23,7 +23,12 @@ int main()
 
     Firelink::Info("DSRWeaponSwap EXE started. Starting weapon swap trigger monitor.");
 
-    EquipmentSwapperConfig config = EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH);
+    EquipmentSwapperConfig config;
+    if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))
+    {
+        Firelink::Error("Failed to load configuration. Exiting...");
+        return -1;
+    }
 
     // In this executable version, we don't need a thread. We block forever here (unless the process search times out).
     const auto swapper = std::make_unique<EquipmentSwapper>(config);
