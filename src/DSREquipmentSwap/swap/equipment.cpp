@@ -25,6 +25,8 @@ using namespace FirelinkDSR;
 using namespace DSREquipmentSwap;
 using namespace DSREquipmentSwap;
 
+// NOTE: Memory max is definitely less than 8 players (causes ChrSlot read errors).
+#define MAX_PLAYERS 4
 
 EquipmentSwapper::~EquipmentSwapper()
 {
@@ -58,20 +60,20 @@ void EquipmentSwapper::Run()
     m_dsrHook = make_unique<DSRHook>(std::move(newProcess));
 
     m_connectedPlayers = std::vector<DSRPlayer>();
-    m_connectedPlayers.reserve(8);
+    m_connectedPlayers.reserve(MAX_PLAYERS);
 
     // Handed dictionaries containing countdown timers for re-checking triggered SpEffect IDs.
-    std::array<std::map<int, int>, 8> leftSpEffectTimers;
+    std::array<std::map<int, int>, MAX_PLAYERS> leftSpEffectTimers;
     for (const SpEffectSwapTrigger& swapTrigger : m_config.leftSpEffectTriggers)
     {
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < MAX_PLAYERS; ++i)
             leftSpEffectTimers[i][swapTrigger.spEffectId] = 0;
     }
 
-    std::array<std::map<int, int>, 8> rightSpEffectTimers;
+    std::array<std::map<int, int>, MAX_PLAYERS> rightSpEffectTimers;
     for (const SpEffectSwapTrigger& swapTrigger : m_config.rightSpEffectTriggers)
     {
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < MAX_PLAYERS; ++i)
             rightSpEffectTimers[i][swapTrigger.spEffectId] = 0;
     }
 
@@ -164,14 +166,18 @@ void EquipmentSwapper::UpdateConnectedPlayers()
 {
     m_connectedPlayers.clear();
 
-    const BasePointer chrSlotArray = m_dsrHook->PlayerIns()->ReadPointer(
+    const auto playerIns = m_dsrHook->PlayerIns();
+    if (playerIns->IsNull())
+        return;  // game not loaded
+
+    const BasePointer chrSlotArray = playerIns->ReadPointer(
         "ChrSlotArray",
         PLAYER_INS::CHR_INS_NO_VTABLE + CHR_INS_NO_VTABLE::CONNECTED_PLAYERS_CHR_SLOT_ARRAY);
 
     if (chrSlotArray.IsNull())
         return;  // no connected players
 
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < MAX_PLAYERS; ++i)
     {
         // Read the PlayerIns pointer for each ChrSlot (0x38 size).
         BasePointer playerInsPtr = chrSlotArray.ReadPointer("ChrSlot", i * 0x38);
