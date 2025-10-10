@@ -340,7 +340,7 @@ void EquipmentSwapper::RevertTempWeaponSwap(const DSRPlayer& player, const bool 
         return;
     }
 
-    if (!player.SetWeapon(WeaponSlot::PRIMARY, swap->sourceWeaponId, isLeftHand))
+    if (const bool revertSuccess = player.SetWeapon(swap->slot, swap->sourceWeaponId, isLeftHand); !revertSuccess)
         Error(format("Failed to revert {}-hand temporary {} weapon {} to {}.",
             hand, slotName, swap->destWeaponId, swap->sourceWeaponId));
     else
