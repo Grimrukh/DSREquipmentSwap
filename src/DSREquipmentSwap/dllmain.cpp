@@ -1,16 +1,17 @@
 ﻿#include "pch.h"
 
-#include "DSRWeaponSwap/EquipmentSwap.h"
-#include "Firelink/Logging.h"
+#include "swap/equipment.hpp"
+
+#include <Firelink/Logging.h>
 
 using std::filesystem::path;
-using DSRWeaponSwap::EquipmentSwapper;
-using DSRWeaponSwap::EquipmentSwapperConfig;
+using DSREquipmentSwap::EquipmentSwapper;
+using DSREquipmentSwap::EquipmentSwapperConfig;
 
 namespace
 {
-    const path JSON_CONFIG_PATH = "DSRWeaponSwap.json";
-    const path LOG_PATH = "DSRWeaponSwap.log";
+    const path JSON_CONFIG_PATH = "DSREquipmentSwap.json";
+    const path LOG_PATH = "DSREquipmentSwap.log";
 
     std::unique_ptr<EquipmentSwapper> equipmentSwapper;
 }
@@ -27,16 +28,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
             if (equipmentSwapper != nullptr)
             {
-                Firelink::Warning("DSRWeaponSwap DLL main loop has already started. Exiting...");
+                Firelink::Warning("DSREquipmentSwap DLL main loop has already started. Exiting...");
                 break;
             }
 
-            Firelink::Info("DSRWeaponSwap DLL loaded. Creating 'DSRWeaponSwap.log' file.");
+            Firelink::Info("DSREquipmentSwap DLL loaded. Creating 'DSREquipmentSwap.log' file.");
 
-            // Set log file to `DSRWeaponSwap.log`.
+            // Set log file to `DSREquipmentSwap.log`.
             Firelink::SetLogFile(LOG_PATH);
 
-            Firelink::Info("DSRWeaponSwap DLL loaded. Starting weapon swap trigger monitor.");
+            Firelink::Info("DSREquipmentSwap DLL loaded. Starting weapon swap trigger monitor.");
 
             EquipmentSwapperConfig config;
             if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))
@@ -54,7 +55,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             // DLL is being unloaded. Stop swap thread.
             if (equipmentSwapper != nullptr)
             {
-                Firelink::Info("DSRWeaponSwap DLL unloading. Stopping weapon swap trigger monitor.");
+                Firelink::Info("DSREquipmentSwap DLL unloading. Stopping weapon swap trigger monitor.");
                 equipmentSwapper->StopThreaded();
             }
             break;

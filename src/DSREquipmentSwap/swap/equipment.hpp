@@ -7,13 +7,12 @@
 #include <thread>
 #include <utility>
 
-#include "FirelinkDSR/DSRHook.h"
+#include <FirelinkDSR/DSRHook.h>
+#include <FirelinkDSR/DSRPlayer.h>
 
-#include "EquipmentSwap.h"
-#include "SwapConfig.h"
-#include "FirelinkDSR/DSRPlayer.h"
+#include "config.hpp"
 
-namespace DSRWeaponSwap
+namespace DSREquipmentSwap
 {
     /// @brief Class that stores state used by the equipment swapper loop (`Run()`).
     class EquipmentSwapper

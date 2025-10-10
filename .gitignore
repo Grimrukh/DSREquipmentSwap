@@ -7,6 +7,9 @@ cmake-build-release/
 output/
 compile_commands.json
 
+# Ignore in-source install directories
+install*/
+
 # Ignore generated project files
 .idea/
 *.iml

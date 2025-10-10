@@ -1,24 +1,22 @@
-﻿#include <filesystem>
+﻿#include "config.hpp"
+
+#include <Firelink/Logging.h>
+#include <nlohmann/json.hpp>
+
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <unordered_set>
 
-#include "Firelink/Logging.h"
-#include "nlohmann/json.hpp"
-
-#include "SwapConfig.h"
-
-using namespace std;
 using namespace Firelink;
 using std::filesystem::path;
 
-
-bool DSRWeaponSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperConfig& config)
+bool DSREquipmentSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperConfig& config)
 {
     using Json = nlohmann::json;
 
     // Open the JSON file.
-    ifstream jsonFile(filePath);
+    std::ifstream jsonFile(filePath);
     if (!jsonFile.is_open())
     {
         Error(format("Failed to open JSON file: {}", filePath.string()));
@@ -33,14 +31,14 @@ bool DSRWeaponSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperConfi
     }
     catch (const Json::parse_error& e)
     {
-        Error("JSON parse error: " + string(e.what()));
+        Error("JSON parse error: " + std::string(e.what()));
         return false;
     }
 
-    unordered_set<string> foundKeys = {};
+    std::unordered_set<std::string> foundKeys = {};
 
     // Helper lambda for extracting Weapon ID-based triggers from JSON.
-    auto extractWeaponIDTriggers = [&foundKeys](const Json& obj, const string& key, vector<WeaponIDSwapTrigger>& triggerList)
+    auto extractWeaponIDTriggers = [&foundKeys](const Json& obj, const std::string& key, std::vector<WeaponIDSwapTrigger>& triggerList)
     {
         if (obj.contains(key))
         {
@@ -70,7 +68,7 @@ bool DSRWeaponSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperConfi
     };
 
     // Helper lambda for extracting SpEffect ID-based triggers from JSON.
-    auto extractSpEffectTriggers = [&foundKeys](const Json& obj, const string& key, vector<SpEffectSwapTrigger>& triggerList)
+    auto extractSpEffectTriggers = [&foundKeys](const Json& obj, const std::string& key, std::vector<SpEffectSwapTrigger>& triggerList)
     {
         if (obj.contains(key))
         {
@@ -100,7 +98,7 @@ bool DSRWeaponSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperConfi
     };
 
     // Helper lambda for extracting integer settings from JSON (all settings are integers, currently).
-    auto extractSetting = [&foundKeys](const Json& obj, const string& key, int& setting)
+    auto extractSetting = [&foundKeys](const Json& obj, const std::string& key, int& setting)
     {
         if (obj.contains(key))
         {
@@ -111,7 +109,7 @@ bool DSRWeaponSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperConfi
             }
             catch (const Json::exception& e)
             {
-                Error("Invalid value type for key: " + key + ". Expected an integer. JSON error: " + string(e.what()));
+                Error("Invalid value type for key: " + key + ". Expected an integer. JSON error: " + std::string(e.what()));
                 return false;
             }
 

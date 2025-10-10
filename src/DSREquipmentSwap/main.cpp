@@ -1,27 +1,29 @@
 ﻿#include "pch.h"
+
+#include "swap/equipment.hpp"
+
+#include <Firelink/Logging.h>
+
 #include <memory>
 
-#include "Firelink/Logging.h"
-#include "DSRWeaponSwap/EquipmentSwap.h"
-
 using std::filesystem::path;
-using DSRWeaponSwap::EquipmentSwapper;
-using DSRWeaponSwap::EquipmentSwapperConfig;
+using DSREquipmentSwap::EquipmentSwapper;
+using DSREquipmentSwap::EquipmentSwapperConfig;
 
 namespace
 {
-    const path JSON_CONFIG_PATH = "DSRWeaponSwap.json";
-    const path LOG_PATH = "DSRWeaponSwapEXE.log";
+    const path JSON_CONFIG_PATH = "DSREquipmentSwap.json";
+    const path LOG_PATH = "DSREquipmentSwapEXE.log";
 }
 
 
 /// @brief Entry point for the EXE. Starts `EquipmentSwapper` main loop in a thread. Never exits the loop!
 int main()
 {
-    // Firelink::Info("DSRWeaponSwap EXE started. Creating 'DSRWeaponSwapEXE.log' file.");
+    // Firelink::Info("DSREquipmentSwap EXE started. Creating 'DSREquipmentSwapEXE.log' file.");
     // Firelink::SetLogFile(LOG_PATH);
 
-    Firelink::Info("DSRWeaponSwap EXE started. Starting weapon swap trigger monitor.");
+    Firelink::Info("DSREquipmentSwap EXE started. Starting weapon swap trigger monitor.");
 
     EquipmentSwapperConfig config;
     if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))

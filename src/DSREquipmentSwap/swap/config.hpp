@@ -1,8 +1,11 @@
 ﻿#pragma once
 
+#include <Firelink/Logging.h>
+
+#include <filesystem>
 #include <format>
 
-namespace DSRWeaponSwap
+namespace DSREquipmentSwap
 {
     struct WeaponIDSwapTrigger
     {

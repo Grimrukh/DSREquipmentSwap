@@ -1,28 +1,29 @@
-﻿#include <filesystem>
+﻿#include "equipment.hpp"
+
+#include "config.hpp"
+
+#include <Firelink/Logging.h>
+#include <Firelink/Pointer.h>
+#include <Firelink/Process.h>
+#include <FirelinkDSR/DSREnums.h>
+#include <FirelinkDSR/DSRHook.h>
+#include <FirelinkDSR/DSRPlayer.h>
+#include <nlohmann/json.hpp>
+
+#include <filesystem>
 #include <format>
 #include <memory>
+#include <ranges>
 #include <thread>
 
-#include "Firelink/Logging.h"
-#include "Firelink/Process.h"
-#include "FirelinkDSR/DSREnums.h"
-#include "FirelinkDSR/DSRHook.h"
-#include "nlohmann/json.hpp"
+// #pragma comment(lib, "FirelinkDSR.lib")
 
-#include "EquipmentSwap.h"
-#include "SwapConfig.h"
-#include "Firelink/Pointer.h"
-#include "FirelinkDSR/DSRPlayer.h"
-
-#pragma comment(lib, "FirelinkDSR.lib")
-
-using namespace std;
 using std::filesystem::path;
 
 using namespace Firelink;
 using namespace FirelinkDSR;
-using namespace DSRWeaponSwap;
-using namespace DSRWeaponSwap;
+using namespace DSREquipmentSwap;
+using namespace DSREquipmentSwap;
 
 
 EquipmentSwapper::~EquipmentSwapper()
@@ -33,7 +34,7 @@ EquipmentSwapper::~EquipmentSwapper()
 
 void EquipmentSwapper::StartThreaded()
 {
-    m_thread = thread([this]{ Run(); });
+    m_thread = std::thread([this]{ Run(); });
 }
 
 void EquipmentSwapper::StopThreaded()
@@ -47,27 +48,27 @@ void EquipmentSwapper::StopThreaded()
 void EquipmentSwapper::Run()
 {
     // Do initial DSR process search.
-    unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
+    std::unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
         DSR_PROCESS_NAME, m_config.processSearchTimeoutMs, m_config.processSearchIntervalMs, m_stopFlag);
 
     if (!newProcess || m_stopFlag.load())
         return;
 
     // Our DSRHook is the sole owner of the managed process for this application.
-    m_dsrHook = make_unique<DSRHook>(move(newProcess));
+    m_dsrHook = make_unique<DSRHook>(std::move(newProcess));
 
-    m_connectedPlayers = vector<DSRPlayer>();
+    m_connectedPlayers = std::vector<DSRPlayer>();
     m_connectedPlayers.reserve(8);
 
     // Handed dictionaries containing countdown timers for re-checking triggered SpEffect IDs.
-    array<map<int, int>, 8> leftSpEffectTimers;
+    std::array<std::map<int, int>, 8> leftSpEffectTimers;
     for (const SpEffectSwapTrigger& swapTrigger : m_config.leftSpEffectTriggers)
     {
         for (int i = 0; i < 8; ++i)
             leftSpEffectTimers[i][swapTrigger.spEffectId] = 0;
     }
 
-    array<map<int, int>, 8> rightSpEffectTimers;
+    std::array<std::map<int, int>, 8> rightSpEffectTimers;
     for (const SpEffectSwapTrigger& swapTrigger : m_config.rightSpEffectTriggers)
     {
         for (int i = 0; i < 8; ++i)
@@ -90,8 +91,8 @@ void EquipmentSwapper::Run()
         {
             // If we have a valid PlayerIns pointer, set it as the host or client player instance.
             const DSRPlayer& player = m_connectedPlayers.at(i);
-            map<int, int>& leftTimers = leftSpEffectTimers.at(i);
-            map<int, int>& rightTimers = rightSpEffectTimers.at(i);
+            std::map<int, int>& leftTimers = leftSpEffectTimers.at(i);
+            std::map<int, int>& rightTimers = rightSpEffectTimers.at(i);
 
             // Update temporary swaps by checking current weapons (we don't force-revert).
             CheckTempWeaponSwaps(player, false);
@@ -110,14 +111,14 @@ void EquipmentSwapper::Run()
         }
 
         // Sleep for refresh interval:
-        this_thread::sleep_for(chrono::milliseconds(m_config.monitorIntervalMs));
+        std::this_thread::sleep_for(std::chrono::milliseconds(m_config.monitorIntervalMs));
     }
 }
 
 
 bool EquipmentSwapper::ValidateHook()
 {
-    if (const shared_ptr<ManagedProcess> dsrProcess = m_dsrHook->GetProcess();
+    if (const std::shared_ptr<ManagedProcess> dsrProcess = m_dsrHook->GetProcess();
         !dsrProcess->IsHandleValid() || dsrProcess->IsProcessTerminated())
     {
         // Lost the process (invalid handle or terminated). We find a new process instance and reset the hook.
@@ -127,11 +128,11 @@ bool EquipmentSwapper::ValidateHook()
 
         // Find again with blocking call.
         Warning("Lost DSR process handle. Searching again...");
-        unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
+        std::unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
             DSR_PROCESS_NAME, m_config.processSearchTimeoutMs, m_config.processSearchIntervalMs, m_stopFlag);
 
         // Pass ownership `newProcess` to a new `DSRHook` instance (sole owner).
-        m_dsrHook = make_unique<DSRHook>(move(newProcess));
+        m_dsrHook = make_unique<DSRHook>(std::move(newProcess));
     }
 
     // Update `m_gameLoaded` state.
@@ -140,9 +141,9 @@ bool EquipmentSwapper::ValidateHook()
         if (m_gameLoaded)
         {
             m_gameLoaded = false;
-            Warning(format("Game is not loaded. Checking again every {} ms...", m_config.gameLoadedIntervalMs));
+            Warning(std::format("Game is not loaded. Checking again every {} ms...", m_config.gameLoadedIntervalMs));
         }
-        this_thread::sleep_for(chrono::milliseconds(m_config.gameLoadedIntervalMs));
+        std::this_thread::sleep_for(std::chrono::milliseconds(m_config.gameLoadedIntervalMs));
         return false;  // do not check triggers
     }
 
@@ -251,7 +252,7 @@ void EquipmentSwapper::CheckHandedSpEffectSwapTriggers(
             {
                 // Record new to old weapon ID mapping. This may replace an existing temporary swap, which we discard.
                 m_tempSwapState.SetHandTempSwap(currentWeaponId, newWeaponId, currentSlot, isLeftHand);
-                Info(format("Recording temporary weapon {}-hand swap: {} -> {}",
+                Info(std::format("Recording temporary weapon {}-hand swap: {} -> {}",
                     isLeftHand ? "Left" : "Right", currentWeaponId, newWeaponId));
             }
         }
@@ -282,7 +283,7 @@ void EquipmentSwapper::CheckTempWeaponSwaps(
 
     if (m_tempSwapState.HasHandTempSwap(true) && forceRevert)
     {
-        Info(format("Reverting left weapon {} to {} (forced).",
+        Info(std::format("Reverting left weapon {} to {} (forced).",
                 newCurrentLeft, newPrimaryLeft));
         RevertTempWeaponSwap(player, true);
         m_tempSwapState.ClearHandTempSwap(true);
@@ -290,7 +291,7 @@ void EquipmentSwapper::CheckTempWeaponSwaps(
     else if (m_tempSwapState.HasHandTempSwapExpired(currentLeftSlot, true))
     {
         // Active temporary left-hand swap is no longer valid. Find and revert it.
-        Info(format("Reverting left weapon {} to {} (current weapon changed to {}).",
+        Info(std::format("Reverting left weapon {} to {} (current weapon changed to {}).",
             newCurrentLeft, newPrimaryLeft, newCurrentLeft));
         RevertTempWeaponSwap(player, true);
         m_tempSwapState.ClearHandTempSwap(true);
@@ -298,7 +299,7 @@ void EquipmentSwapper::CheckTempWeaponSwaps(
 
     if (m_tempSwapState.HasHandTempSwap(false) && forceRevert)
     {
-        Info(format("Reverting right weapon {} to {} (forced).",
+        Info(std::format("Reverting right weapon {} to {} (forced).",
                 newCurrentRight, newPrimaryRight));
         RevertTempWeaponSwap(player, false);
         m_tempSwapState.ClearHandTempSwap(false);
@@ -306,7 +307,7 @@ void EquipmentSwapper::CheckTempWeaponSwaps(
     else if (m_tempSwapState.HasHandTempSwapExpired(currentRightSlot, false))
     {
         // Active temporary right-hand swap is no longer valid. Find and revert it.
-        Info(format("Reverting right weapon {} to {} (current weapon changed to {}).",
+        Info(std::format("Reverting right weapon {} to {} (current weapon changed to {}).",
             newCurrentRight, newPrimaryRight, newCurrentRight));
         RevertTempWeaponSwap(player, false);
         m_tempSwapState.ClearHandTempSwap(false);
@@ -319,16 +320,16 @@ void EquipmentSwapper::CheckTempWeaponSwaps(
 
 void EquipmentSwapper::RevertTempWeaponSwap(const DSRPlayer& player, const bool isLeftHand) const
 {
-    const string hand = isLeftHand ? "Left" : "Right";
+    const std::string hand = isLeftHand ? "Left" : "Right";
 
-    optional<TempSwapState::TempSwap> swap = m_tempSwapState.GetHandTempSwap(isLeftHand);
+    std::optional<TempSwapState::TempSwap> swap = m_tempSwapState.GetHandTempSwap(isLeftHand);
     if (!swap.has_value())
     {
         Error("Tried to revert temporary weapon swap that does not exist.");
         return;
     }
 
-    string slotName = swap->slot == WeaponSlot::PRIMARY ? "primary" : "secondary";
+    std::string slotName = swap->slot == WeaponSlot::PRIMARY ? "primary" : "secondary";
 
     // Check that the expected temporary weapon ID is still in the slot.
     if (player.GetWeapon(swap->slot, isLeftHand) != swap->destWeaponId)
@@ -351,7 +352,7 @@ void EquipmentSwapper::RevertTempWeaponSwap(const DSRPlayer& player, const bool 
 void EquipmentSwapper::DecrementSpEffectTimers(std::map<int, int>& timers) const
 {
     // Decrement each timer countdown by monitor refresh interval:
-    for (int& timer: timers | views::values)
+    for (int& timer: timers | std::views::values)
     {
         timer -= m_config.monitorIntervalMs;
         if (timer <= 0)
@@ -368,12 +369,12 @@ bool EquipmentSwapper::LoadConfig(const path& jsonConfigPath, EquipmentSwapperCo
         Error(format("Failed to parse JSON file: {}", jsonConfigPath.string()));
         return false;
     }
-    Info(format("Loaded settings and weapon swap triggers from file: {}", jsonConfigPath.string()));
-    Info(format("Process search timeout: {} ms", config.processSearchTimeoutMs));
-    Info(format("Process search interval: {} ms", config.processSearchIntervalMs));
-    Info(format("Monitor interval: {} ms", config.monitorIntervalMs));
-    Info(format("Game loaded interval: {} ms", config.gameLoadedIntervalMs));
-    Info(format("SpEffect trigger cooldown: {} ms", config.spEffectTriggerCooldownMs));
+    Info(std::format("Loaded settings and weapon swap triggers from file: {}", jsonConfigPath.string()));
+    Info(std::format("Process search timeout: {} ms", config.processSearchTimeoutMs));
+    Info(std::format("Process search interval: {} ms", config.processSearchIntervalMs));
+    Info(std::format("Monitor interval: {} ms", config.monitorIntervalMs));
+    Info(std::format("Game loaded interval: {} ms", config.gameLoadedIntervalMs));
+    Info(std::format("SpEffect trigger cooldown: {} ms", config.spEffectTriggerCooldownMs));
     LogTriggers(config.leftWeaponIdTriggers, "Left-Hand Weapon ID Trigger");
     LogTriggers(config.rightWeaponIdTriggers, "Right-Hand Weapon ID Trigger");
     LogTriggers(config.leftSpEffectTriggers, "Left-Hand SpEffect ID Trigger");
