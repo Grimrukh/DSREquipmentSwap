@@ -1,7 +1,8 @@
-﻿cmake_minimum_required(VERSION 3.20)
-project(DSREquipmentSwap)
-
+﻿
+cmake_minimum_required(VERSION 3.27)
+project(DSREquipmentSwap VERSION 1.5.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Vendoring Firelink library sources:
 add_subdirectory("Dependencies/Firelink/FirelinkCore")
