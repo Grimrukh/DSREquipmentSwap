@@ -1,0 +1,111 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+AccessModifierOffset: -4
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveAssignments: None
+AlignOperands: Align
+AlignEscapedNewlines: LeftWithLastLine
+AlignTrailingComments: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Allman
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializersBeforeComma: true
+BreakConstructorInitializers: BeforeColon
+BreakTemplateDeclarations: Yes
+ColumnLimit: 121
+CommentPragmas: '^ IWYU pragma:'
+ConstructorInitializerIndentWidth: 0
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ContinuationIndentWidth: 4
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+DisableFormat: false
+ExperimentalAutoDetectBinPacking: false
+ForEachMacros: [ foreach, Q_FOREACH, BOOST_FOREACH ]
+IndentCaseLabels: true
+IndentWidth: 4
+IndentWrappedFunctionNames: false
+LambdaBodyIndentation: Signature
+KeepEmptyLinesAtTheStartOfBlocks: false
+MacroBlockBegin: ''
+MacroBlockEnd: ''
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: All
+ObjCBlockIndentWidth: 4
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+PenaltyBreakBeforeFirstCallParameter: 0
+PenaltyBreakComment: 50
+PenaltyBreakFirstLessLess: 5
+PenaltyBreakString: 100
+PenaltyExcessCharacter: 1000
+PenaltyReturnTypeOnItsOwnLine: 5000
+PointerAlignment: Left
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInContainerLiterals: true
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+Standard: c++20
+TabWidth: 4
+UseTab: Never
+
+# --- include sorting & grouping ---
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+
+# 1) Matching header first in source files.
+IncludeIsMainRegex: '([-_](test|unittest))?$'
+IncludeIsMainSourceRegex: '(\.cc|\.cpp|\.cxx)$'
+
+# 2) Categories.
+IncludeCategories:
+  # --- PROJECT (quoted includes) ---
+  # Files in the current directory (no slash): put these before subfolders.
+  - Regex: '^"[^/]+\.(h|hh|hpp|hxx|ipp)"$'
+    Priority: 1
+    SortPriority: 1
+  # Project headers in subfolders (quoted includes with a slash).
+  - Regex: '^"[^"]+/(.+)\.(h|hh|hpp|hxx|ipp)"$'
+    Priority: 1
+    SortPriority: 2
+
+  # Any bracket includes with no slash and no non-'.h' suffix (likely to be system).
+  - Regex: '^<([_a-zA-Z0-9]+)(\.h)?>$'
+    Priority: 7
+
+  # '<Firelink*>' WITHOUT a slash (before system).
+  - Regex: '^<Firelink[^/]+>$'
+    Priority: 3
+    SortPriority: 3
+  # '<Firelink*/*>' (before system).
+  - Regex: '^<Firelink.+>$'
+    Priority: 3
+    SortPriority: 4
+
+  # Anything else WITHOUT a slash (before system).
+  - Regex: '^<[^/]+>$'
+    Priority: 5
+    SortPriority: 5
+  # Anything else (before system).
+  - Regex: '^<.+>$'
+    Priority: 5
+    SortPriority: 6
+...

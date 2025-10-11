@@ -1,37 +1,42 @@
 
+set(DSR_EQUIPMENT_SWAP_SOURCES
+    armor.hpp
+    armor.cpp
+    config.hpp
+    config.cpp
+    equipment.hpp
+    equipment.cpp
+    ring.hpp
+    ring.cpp
+    tools.hpp
+    weapon.hpp
+    weapon.cpp
+)
+
 option(DSR_EQUIPMENT_SWAP_EXECUTABLE "Build DSREquipmentSwap as an executable instead of a DLL" OFF)
 
 if(DSR_EQUIPMENT_SWAP_EXECUTABLE)
-    add_executable(DSREquipmentSwap
+    add_executable(DSREquipmentSwap)
+    target_sources(DSREquipmentSwap PRIVATE
         main.cpp
-        pch.h
-        pch.cpp
-        swap/config.hpp
-        swap/config.cpp
-        swap/equipment.hpp
-        swap/equipment.cpp
+        ${DSR_EQUIPMENT_SWAP_SOURCES}
     )
 else()
-    add_library(DSREquipmentSwap SHARED
+    # NOTE: This is not an SDK. It's a runtime hook DLL. All sources are PRIVATE.
+    add_library(DSREquipmentSwap SHARED)
+    target_sources(DSREquipmentSwap PRIVATE
         dllmain.cpp
-        pch.h
-        pch.cpp
-        swap/config.hpp
-        swap/config.cpp
-        swap/equipment.hpp
-        swap/equipment.cpp
+        ${DSR_EQUIPMENT_SWAP_SOURCES}
     )
-    #if (WIN32)
-    #    set_target_properties(DSREquipmentSwap PROPERTIES PREFIX "")
-    #endif()
 endif()
+
+target_include_directories(DSREquipmentSwap PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+)
 
 target_link_libraries(DSREquipmentSwap
     PUBLIC FirelinkCore FirelinkDSR nlohmann_json
 )
-
-target_precompile_headers(DSREquipmentSwap PRIVATE
-    pch.h)
 
 # Copy runtime DLLs into the build directory.
 add_custom_command(TARGET DSREquipmentSwap POST_BUILD
@@ -41,7 +46,7 @@ add_custom_command(TARGET DSREquipmentSwap POST_BUILD
 )
 add_custom_command(TARGET DSREquipmentSwap POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:FirelinkDSR>"
+    "$<TARGET_FILE:FirelinkDSRHook>"
     "$<TARGET_FILE_DIR:DSREquipmentSwap>"
 )
 
@@ -64,7 +69,7 @@ else ()
     )
 endif()
 
-install(TARGETS DSREquipmentSwap DSREquipmentSwap)
+install(TARGETS DSREquipmentSwap FirelinkCore FirelinkDSRHook)
 
 # Only install SWAP_USER_CONFIG_FILE to 'bin' if it doesn't already exist.
 install(CODE "

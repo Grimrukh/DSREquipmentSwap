@@ -1,21 +1,19 @@
-﻿#include "pch.h"
-
-#include "swap/equipment.hpp"
+﻿#include <DSREquipmentSwap/Config.hpp>
+#include <DSREquipmentSwap/Equipment.hpp>
 
 #include <Firelink/Logging.h>
 
 #include <memory>
 
-using std::filesystem::path;
 using DSREquipmentSwap::EquipmentSwapper;
 using DSREquipmentSwap::EquipmentSwapperConfig;
+using std::filesystem::path;
 
 namespace
 {
     const path JSON_CONFIG_PATH = "DSREquipmentSwap.json";
     const path LOG_PATH = "DSREquipmentSwapEXE.log";
-}
-
+} // namespace
 
 /// @brief Entry point for the EXE. Starts `EquipmentSwapper` main loop in a thread. Never exits the loop!
 int main()

@@ -1,0 +1,44 @@
+﻿name: Build and Test DLLs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      # Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # CMake 3.31 is already installed on the Windows runner.
+      - name: Verify CMake version
+        run: cmake --version
+
+      # Install ninja-build tool (currently 1.11.1).
+      - name: Install ninja-build tool
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      # Configure with CMake (Release) to `build` subdirectory.
+      # The GHA Windows 2022 runner has Visual Studio 17 2022 installed.
+      # (It also has MinGW installed, but the GCC version is too old for C++20.)
+      - name: Configure CMake with MSVC
+        run: >
+          cmake -S . -B cmake-build-release-vs
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DCMAKE_BUILD_TYPE=Release
+
+      # Build the project (Release) from `build` subdirectory.
+      - name: Build the DLLs
+        run: cmake --build cmake-build-release-vs --config Release
+
+      # Currently no tests to run (runtime hook DLL).
+#      - name: Run Tests
+#        run: ctest --test-dir cmake-build-release-vs --output-on-failure -C Release --verbose

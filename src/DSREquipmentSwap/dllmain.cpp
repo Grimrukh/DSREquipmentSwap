@@ -1,12 +1,11 @@
-﻿#include "pch.h"
-
-#include "swap/equipment.hpp"
+﻿#include <DSREquipmentSwap/Config.hpp>
+#include <DSREquipmentSwap/Equipment.hpp>
 
 #include <Firelink/Logging.h>
 
-using std::filesystem::path;
 using DSREquipmentSwap::EquipmentSwapper;
 using DSREquipmentSwap::EquipmentSwapperConfig;
+using std::filesystem::path;
 
 namespace
 {
@@ -14,8 +13,7 @@ namespace
     const path LOG_PATH = "DSREquipmentSwap.log";
 
     std::unique_ptr<EquipmentSwapper> equipmentSwapper;
-}
-
+} // namespace
 
 /// @brief Entry point for the DLL. Starts `EquipmentSwapper` main loop in a thread until library is unloaded.
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -43,7 +41,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))
             {
                 Firelink::Error("Failed to load configuration. Exiting...");
-                return FALSE;  // Exit if config loading failed.
+                return FALSE; // Exit if config loading failed.
             }
             equipmentSwapper = std::make_unique<EquipmentSwapper>(config);
             equipmentSwapper->StartThreaded();

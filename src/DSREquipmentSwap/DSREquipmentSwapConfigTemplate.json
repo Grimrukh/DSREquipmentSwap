@@ -5,17 +5,29 @@
   "GameLoadedIntervalMs": 200,
   "SpEffectTriggerCooldownMs": 500,
 
-  "LeftWeaponIDTriggers": [
-    [306000, -6000],
-    [300015, -15]
+  "__doc__": "SwapTrigger: [SpEffectTriggerID, ParamTriggerID, ParamIDOffset, IsPermanent = false] (-1 == ignore trigger)",
+
+  "LeftWeaponTriggers": [
+    [-1, 306000, -6000],
+    [-1, 300015, -15],
+    [2200, -1, -1]
   ],
-  "RightWeaponIDTriggers": [
-    [306000, 5]
+  "RightWeaponTriggers": [
+    [-1, -1, 100, false]
   ],
-  "LeftSpEffectTriggers": [
-    [2200, -1, false]
+  "HeadArmorTriggers":  [
+    [-1, -1, 100, false]
   ],
-  "RightSpEffectTriggers": [
-    [2200, 1, false]
+  "BodyArmorTriggers": [
+    [-1, -1, 100, false]
+  ],
+  "ArmsArmorTriggers":  [
+    [-1, -1, 100, false]
+  ],
+  "LegsArmorTriggers": [
+    [-1, -1, 100, false]
+  ],
+  "RingTriggers":  [
+    [-1, -1, 100, false]
   ]
 }
