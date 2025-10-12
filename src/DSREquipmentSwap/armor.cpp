@@ -48,6 +48,8 @@ void ArmorSwapper::CheckArmorSwapTriggers(
         {
             if (!contains(activeSpEffects, swapTrigger.spEffectIDTrigger))
                 continue; // SpEffect not active
+            if (swapTrigger.GetCooldown(playerIndex) > 0)
+                continue; // SpEffect trigger still on cooldown for this swap
         }
 
         const int currentParamID = player.GetArmor(type);

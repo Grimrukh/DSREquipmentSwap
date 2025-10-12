@@ -25,6 +25,8 @@ void RingSwapper::CheckRingSwapTriggers(
         {
             if (!contains(activeSpEffects, swapTrigger.spEffectIDTrigger))
                 continue; // SpEffect not active
+            if (swapTrigger.GetCooldown(playerIndex) > 0)
+                continue; // SpEffect trigger still on cooldown for this swap
         }
 
         // Check both ring slots.

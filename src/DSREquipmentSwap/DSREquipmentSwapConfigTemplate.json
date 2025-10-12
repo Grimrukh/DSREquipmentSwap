@@ -10,24 +10,12 @@
   "LeftWeaponTriggers": [
     [-1, 306000, -6000],
     [-1, 300015, -15],
-    [2200, -1, -1]
+    [40, -1, 1000]
   ],
-  "RightWeaponTriggers": [
-    [-1, -1, 100, false]
-  ],
-  "HeadArmorTriggers":  [
-    [-1, -1, 100, false]
-  ],
-  "BodyArmorTriggers": [
-    [-1, -1, 100, false]
-  ],
-  "ArmsArmorTriggers":  [
-    [-1, -1, 100, false]
-  ],
-  "LegsArmorTriggers": [
-    [-1, -1, 100, false]
-  ],
-  "RingTriggers":  [
-    [-1, -1, 100, false]
-  ]
+  "RightWeaponTriggers": [],
+  "HeadArmorTriggers": [],
+  "BodyArmorTriggers": [],
+  "ArmsArmorTriggers": [],
+  "LegsArmorTriggers": [],
+  "RingTriggers": []
 }

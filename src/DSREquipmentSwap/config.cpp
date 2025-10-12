@@ -51,16 +51,20 @@ bool DSREquipmentSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperCo
             int triggerCount = 0;
             for (const auto& triggerEntry : obj[key])
             {
+                int spEffectIDTrigger, paramIDTrigger, paramIDOffset;
+                bool isPermanent = false;
                 if (triggerEntry.size() == 3)
                 {
-                    triggerList.emplace_back(equipType, triggerEntry[0], triggerEntry[1], triggerEntry[2], false);
-                    ++triggerCount;
+                    spEffectIDTrigger = triggerEntry[0];
+                    paramIDTrigger = triggerEntry[1];
+                    paramIDOffset = triggerEntry[2];
                 }
                 else if (triggerEntry.size() == 4)
                 {
-                    triggerList.emplace_back(
-                        equipType, triggerEntry[0], triggerEntry[1], triggerEntry[2], triggerEntry[3]);
-                    ++triggerCount;
+                    spEffectIDTrigger = triggerEntry[0];
+                    paramIDTrigger = triggerEntry[1];
+                    paramIDOffset = triggerEntry[2];
+                    isPermanent = triggerEntry[3];
                 }
                 else
                 {
@@ -72,6 +76,36 @@ bool DSREquipmentSwap::ParseTriggerJson(const path& filePath, EquipmentSwapperCo
                             key));
                     return false;
                 }
+
+                if (spEffectIDTrigger == -1 && paramIDTrigger == -1)
+                {
+                    Error(
+                        std::format(
+                            "Invalid swap trigger entry in '{}'. "
+                            "At least one of SpEffectIDTrigger or ParamIDTrigger must be set to a positive value.",
+                            key));
+                    return false;
+                }
+
+                if (spEffectIDTrigger < -1)
+                {
+                    Error(
+                        std::format(
+                            "Invalid SpEffectIDTrigger in swap trigger entry in '{}'. Must be -1 or greater.",
+                            key));
+                    return false;
+                }
+                if (paramIDTrigger < -1)
+                {
+                    Error(
+                        std::format(
+                            "Invalid ParamIDTrigger in swap trigger entry in '{}'. Must be -1 or greater.",
+                            key));
+                    return false;
+                }
+
+                triggerList.emplace_back(equipType, spEffectIDTrigger, paramIDTrigger, paramIDOffset, isPermanent);
+                ++triggerCount;
             }
 
             Info(std::format("Found {} triggers of type '{}' in JSON.", triggerCount, key));

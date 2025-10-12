@@ -59,6 +59,7 @@ namespace DSREquipmentSwap
         RingSwapper m_ringSwapper;
 
         bool m_gameLoaded = true; // assume true to start
+        bool m_requestTempSwapForceRevert = false; // executed when 1+ connected players are next detected
 
         /// @brief Called on each loop update to ensure the hooked process is still valid and running.
         bool ValidateHook();

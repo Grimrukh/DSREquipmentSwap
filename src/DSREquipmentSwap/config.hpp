@@ -67,6 +67,17 @@ namespace DSREquipmentSwap
                 cooldown = 0;
         }
 
+        [[nodiscard]] int GetCooldown(const int playerIndex) const
+        {
+            if (playerIndex < 0 || playerIndex >= DSR_MAX_PLAYERS)
+            {
+                Firelink::Error(
+                    "Invalid player index in GetCooldown (must be 0 to " + std::to_string(DSR_MAX_PLAYERS - 1) + ").");
+                return 0;
+            }
+            return playerCooldowns[playerIndex];
+        }
+
         void ResetCooldown(const int playerIndex, const int cooldown)
         {
             if (playerIndex < 0 || playerIndex >= DSR_MAX_PLAYERS)

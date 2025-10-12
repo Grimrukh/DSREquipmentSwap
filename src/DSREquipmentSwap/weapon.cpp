@@ -79,6 +79,8 @@ void WeaponSwapper::CheckHandedSwapTriggers(
                     continue;
                 if (!contains(activeSpEffects, swapTrigger.spEffectIDTrigger))
                     continue; // SpEffect not active
+                if (swapTrigger.GetCooldown(playerIndex) > 0)
+                    continue; // SpEffect trigger still on cooldown for this swap
             }
 
             const int currentParamID = player.GetWeapon(slot, isLeftHand);
@@ -137,7 +139,7 @@ void WeaponSwapper::CheckTempWeaponSwaps(const DSRPlayer& player, const bool for
     if (forceRevert && !m_tempWeaponSwapHistory.HasHandTempSwap(true) && !m_tempWeaponSwapHistory.HasHandTempSwap(false))
     {
         // Report that we're forcing a revert but there are no temporary swaps to revert, for clarity.
-        Info("No temporary weapon swaps to forcibly revert.");
+        Info("No temporary weapon swaps to force-revert.");
     }
 
     if (m_tempWeaponSwapHistory.HasHandTempSwap(true) && forceRevert)

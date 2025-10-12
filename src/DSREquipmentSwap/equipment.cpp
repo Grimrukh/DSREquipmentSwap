@@ -69,6 +69,18 @@ void EquipmentSwapper::Run()
 
         UpdateConnectedPlayers();
 
+        if (m_connectedPlayers.size() >= 1 && m_requestTempSwapForceRevert)
+        {
+            Info("Reverting weapon/armor/ring temp swaps...");
+            m_requestTempSwapForceRevert = false;
+            for (const auto& player : m_connectedPlayers | std::views::values)
+            {
+                m_weaponSwapper.CheckTempWeaponSwaps(player, true);
+                m_armorSwapper.RevertTempArmorSwaps(player);
+                m_ringSwapper.RevertTempRingSwaps(player);
+            }
+        }
+
         for (const auto& [playerIndex, player] : m_connectedPlayers)
         {
             // Get active SpEffects once for player.
@@ -141,14 +153,9 @@ bool EquipmentSwapper::ValidateHook()
     {
         m_gameLoaded = true;
         // Game has been (re)-loaded. Any temporary weapon swaps need to be undone (forced revert).
-        UpdateConnectedPlayers();
+        m_requestTempSwapForceRevert = true;
 
-        for (const auto& player : m_connectedPlayers | std::views::values)
-        {
-            m_weaponSwapper.CheckTempWeaponSwaps(player, true);
-            m_armorSwapper.RevertTempArmorSwaps(player);
-        }
-
+        // NOTE: Connected players may not be immediately available.
         Info("Game is loaded. Monitoring equipment swap triggers...");
     }
 
