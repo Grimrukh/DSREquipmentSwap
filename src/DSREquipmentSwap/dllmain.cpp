@@ -1,10 +1,10 @@
-﻿#include <DSREquipmentSwap/Config.hpp>
-#include <DSREquipmentSwap/Equipment.hpp>
+﻿#include <DSREquipmentSwap/Config.h>
+#include <DSREquipmentSwap/EquipmentSwapper.h>
 
 #include <Firelink/Logging.h>
 
+using DSREquipmentSwap::EquipmentSwapConfig;
 using DSREquipmentSwap::EquipmentSwapper;
-using DSREquipmentSwap::EquipmentSwapperConfig;
 using std::filesystem::path;
 
 namespace
@@ -37,7 +37,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
             Firelink::Info("DSREquipmentSwap DLL loaded. Starting weapon swap trigger monitor.");
 
-            EquipmentSwapperConfig config;
+            EquipmentSwapConfig config;
             if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))
             {
                 Firelink::Error("Failed to load configuration. Exiting...");

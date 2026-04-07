@@ -1,21 +1,45 @@
 ﻿{
-  "ProcessSearchTimeoutMs": 3600000,
-  "ProcessSearchIntervalMs": 500,
-  "MonitorIntervalMs": 10,
-  "GameLoadedIntervalMs": 200,
-  "SpEffectTriggerCooldownMs": 500,
+  "hookConfig": {
+    "processSearchTimeoutMs": 3600000,
+    "processSearchIntervalMs": 500,
+    "monitorIntervalMs": 10,
+    "gameLoadedIntervalMs": 200,
+    "spEffectTriggerCooldownMs": 500
+  },
 
-  "__doc__": "SwapTrigger: [SpEffectTriggerID, ParamTriggerID, ParamIDOffset, IsPermanent = false] (-1 == ignore trigger)",
-
-  "LeftWeaponTriggers": [
-    [-1, 306000, -6000],
-    [-1, 300015, -15],
-    [40, -1, 1000]
+  "leftWeaponTriggers": [
+    {
+      "spEffectIDTrigger": -1,
+      "maxSpEffectIDTrigger":  -1,
+      "paramIDTrigger": 306000,
+      "maxParamIDTrigger": -1,
+      "targetParamID": -6000,
+      "isTargetIDAbsolute": false,
+      "isPermanent": false
+    },
+    {
+      "spEffectIDTrigger": -1,
+      "maxSpEffectIDTrigger":  -1,
+      "paramIDTrigger": 300015,
+      "maxParamIDTrigger": -1,
+      "targetParamID": 300000,
+      "isTargetIDAbsolute": true,
+      "isPermanent": false
+    },
+    {
+      "spEffectIDTrigger": 40,
+      "maxSpEffectIDTrigger":  -1,
+      "paramIDTrigger": -1,
+      "maxParamIDTrigger": -1,
+      "targetParamID": 1000,
+      "isTargetIDAbsolute": false,
+      "isPermanent": false
+    }
   ],
-  "RightWeaponTriggers": [],
-  "HeadArmorTriggers": [],
-  "BodyArmorTriggers": [],
-  "ArmsArmorTriggers": [],
-  "LegsArmorTriggers": [],
-  "RingTriggers": []
+  "rightWeaponTriggers": [],
+  "headArmorTriggers": [],
+  "bodyArmorTriggers": [],
+  "armsArmorTriggers": [],
+  "legsArmorTriggers": [],
+  "ringTriggers": []
 }

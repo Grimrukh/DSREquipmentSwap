@@ -1,6 +1,6 @@
-﻿#include <DSREquipmentSwap/Weapon.hpp>
+﻿#include "Weapon.h"
 
-#include <DSREquipmentSwap/Tools.hpp>
+#include <DSREquipmentSwap/Tools.h>
 
 #include <Firelink/Process.h>
 #include <FirelinkDSRHook/DSREnums.h>
@@ -63,21 +63,17 @@ void WeaponSwapper::CheckHandedSwapTriggers(
 {
     for (SwapTrigger& swapTrigger : triggers)
     {
-        if (swapTrigger.equipType != EquipmentType::WEAPON)
-        {
-            Error("Non-weapon trigger passed to weapon trigger checker.");
-            continue;
-        }
+        const SwapTriggerConfig& config = swapTrigger.Config();
 
         // Iterate over PRIMARY and SECONDARY slots:
         for (const WeaponSlot slot : {WeaponSlot::PRIMARY, WeaponSlot::SECONDARY})
         {
-            if (swapTrigger.spEffectIDTrigger > 0)
+            if (config.spEffectIDTrigger >= 0)
             {
                 // Only works for current slot.
                 if (slot != player.GetWeaponSlot(isLeftHand))
                     continue;
-                if (!contains(activeSpEffects, swapTrigger.spEffectIDTrigger))
+                if (!contains(activeSpEffects, config.spEffectIDTrigger))
                     continue; // SpEffect not active
                 if (swapTrigger.GetCooldown(playerIndex) > 0)
                     continue; // SpEffect trigger still on cooldown for this swap
@@ -85,29 +81,29 @@ void WeaponSwapper::CheckHandedSwapTriggers(
 
             const int currentParamID = player.GetWeapon(slot, isLeftHand);
 
-            if (swapTrigger.paramIDTrigger > 0 && currentParamID != swapTrigger.paramIDTrigger)
+            if (config.paramIDTrigger > 0 && !config.CheckParamIDTrigger(currentParamID))
                 continue; // ParamID does not match
 
-            const int newParamID = currentParamID + swapTrigger.paramIDOffset;
+            const int newParamID = config.GetTargetParamID(currentParamID);
 
             if (!player.SetWeapon(slot, newParamID, isLeftHand))
                 Error(
                     std::format(
-                        "{}-hand weapon ID trigger failed: {}", isLeftHand ? "Left" : "Right", swapTrigger.ToString()));
+                        "{}-hand weapon ID trigger failed: {}", isLeftHand ? "Left" : "Right", config.ToString()));
             else
                 Info(
                     std::format(
                         "{}-hand weapon ID trigger succeeded: {}",
                         isLeftHand ? "Left" : "Right",
-                        swapTrigger.ToString()));
+                        config.ToString()));
 
-            if (swapTrigger.spEffectIDTrigger > 0)
+            if (config.spEffectIDTrigger > 0)
             {
                 // Set SpEffect trigger cooldown.
                 swapTrigger.ResetCooldown(playerIndex, m_triggerCooldownMs);
             }
 
-            if (!swapTrigger.isPermanent)
+            if (!config.isPermanent)
             {
                 // Record new to old weapon ID mapping. This may replace an existing temporary swap, which we discard.
                 m_tempWeaponSwapHistory.SetHandTempSwap(currentParamID, newParamID, slot, isLeftHand);

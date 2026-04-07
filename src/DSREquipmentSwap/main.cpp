@@ -1,12 +1,12 @@
-﻿#include <DSREquipmentSwap/Config.hpp>
-#include <DSREquipmentSwap/Equipment.hpp>
+﻿#include <DSREquipmentSwap/Config.h>
+#include <DSREquipmentSwap/EquipmentSwapper.h>
 
 #include <Firelink/Logging.h>
 
 #include <memory>
 
+using DSREquipmentSwap::EquipmentSwapConfig;
 using DSREquipmentSwap::EquipmentSwapper;
-using DSREquipmentSwap::EquipmentSwapperConfig;
 using std::filesystem::path;
 
 namespace
@@ -18,12 +18,13 @@ namespace
 /// @brief Entry point for the EXE. Starts `EquipmentSwapper` main loop in a thread. Never exits the loop!
 int main()
 {
+    // DISABLED: This log grows too aggressively.
     // Firelink::Info("DSREquipmentSwap EXE started. Creating 'DSREquipmentSwapEXE.log' file.");
     // Firelink::SetLogFile(LOG_PATH);
 
     Firelink::Info("DSREquipmentSwap EXE started. Starting weapon swap trigger monitor.");
 
-    EquipmentSwapperConfig config;
+    EquipmentSwapConfig config;
     if (!EquipmentSwapper::LoadConfig(JSON_CONFIG_PATH, config))
     {
         Firelink::Error("Failed to load configuration. Exiting...");

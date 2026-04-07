@@ -1,7 +1,8 @@
-#include <DSREquipmentSwap/Equipment.hpp>
+#include "EquipmentSwapper.h"
 
-#include <DSREquipmentSwap/Config.hpp>
-#include <DSREquipmentSwap/Weapon.hpp>
+#include <DSREquipmentSwap/Config.h>
+#include <DSREquipmentSwap/SwapTrigger.h>
+#include <DSREquipmentSwap/Weapon.h>
 
 #include <Firelink/Logging.h>
 #include <Firelink/Pointer.h>
@@ -13,6 +14,7 @@
 
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <memory>
 #include <ranges>
 #include <thread>
@@ -22,6 +24,31 @@ using std::filesystem::path;
 using namespace Firelink;
 using namespace FirelinkDSR;
 using namespace DSREquipmentSwap;
+
+EquipmentSwapper::EquipmentSwapper(EquipmentSwapConfig config)
+    : m_config(std::move(config))
+    , m_weaponSwapper(m_config.hookConfig.spEffectTriggerCooldownMs)
+    , m_armorSwapper(m_config.hookConfig.spEffectTriggerCooldownMs)
+    , m_ringSwapper(m_config.hookConfig.spEffectTriggerCooldownMs)
+{
+    // Construct matching lists of SwapTrigger state managers.
+    auto emplaceTriggers = [](const std::vector<SwapTriggerConfig>& triggerConfigs, std::vector<SwapTrigger>& triggerList)
+    {
+        triggerList.reserve(triggerConfigs.size());
+        for (const auto& triggerConfig : triggerConfigs)
+        {
+            triggerList.emplace_back(triggerConfig);
+        }
+    };
+
+    emplaceTriggers(m_config.leftWeaponTriggers, m_leftWeaponTriggers);
+    emplaceTriggers(m_config.rightWeaponTriggers, m_rightWeaponTriggers);
+    emplaceTriggers(m_config.headArmorTriggers, m_headArmorTriggers);
+    emplaceTriggers(m_config.bodyArmorTriggers, m_bodyArmorTriggers);
+    emplaceTriggers(m_config.armsArmorTriggers, m_armsArmorTriggers);
+    emplaceTriggers(m_config.legsArmorTriggers, m_legsArmorTriggers);
+    emplaceTriggers(m_config.ringTriggers, m_ringTriggers);
+}
 
 EquipmentSwapper::~EquipmentSwapper()
 {
@@ -46,7 +73,10 @@ void EquipmentSwapper::Run()
 {
     // Do initial DSR process search.
     std::unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
-        DSR_PROCESS_NAME, m_config.processSearchTimeoutMs, m_config.processSearchIntervalMs, m_stopFlag);
+        DSR_PROCESS_NAME,
+        m_config.hookConfig.processSearchTimeoutMs,
+        m_config.hookConfig.processSearchIntervalMs,
+        m_stopFlag);
 
     if (!newProcess || m_stopFlag.load())
         return;
@@ -69,7 +99,7 @@ void EquipmentSwapper::Run()
 
         UpdateConnectedPlayers();
 
-        if (m_connectedPlayers.size() >= 1 && m_requestTempSwapForceRevert)
+        if (!m_connectedPlayers.empty() && m_requestTempSwapForceRevert)
         {
             Info("Reverting weapon/armor/ring temp swaps...");
             m_requestTempSwapForceRevert = false;
@@ -91,30 +121,30 @@ void EquipmentSwapper::Run()
 
             // WEAPONS: We check and replace primary AND secondary weapons per hand.
             m_weaponSwapper.CheckHandedSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.leftWeaponTriggers, true);
+                playerIndex, player, activeSpEffects, m_leftWeaponTriggers, true);
             m_weaponSwapper.CheckHandedSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.rightWeaponTriggers, false);
+                playerIndex, player, activeSpEffects, m_rightWeaponTriggers, false);
 
             // ARMOR
             m_armorSwapper.CheckArmorSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.headArmorTriggers, ArmorType::HEAD);
+                playerIndex, player, activeSpEffects, m_headArmorTriggers, ArmorType::HEAD);
             m_armorSwapper.CheckArmorSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.bodyArmorTriggers, ArmorType::BODY);
+                playerIndex, player, activeSpEffects, m_bodyArmorTriggers, ArmorType::BODY);
             m_armorSwapper.CheckArmorSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.armsArmorTriggers, ArmorType::ARMS);
+                playerIndex, player, activeSpEffects, m_armsArmorTriggers, ArmorType::ARMS);
             m_armorSwapper.CheckArmorSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.legsArmorTriggers, ArmorType::LEGS);
+                playerIndex, player, activeSpEffects, m_legsArmorTriggers, ArmorType::LEGS);
 
             // RINGS (all slots)
             m_ringSwapper.CheckRingSwapTriggers(
-                playerIndex, player, activeSpEffects, m_config.ringTriggers);
+                playerIndex, player, activeSpEffects, m_ringTriggers);
 
             // Decrement cooldown timers for swap triggers.
             DecrementTriggerCooldowns();
         }
 
         // Sleep for refresh interval:
-        std::this_thread::sleep_for(std::chrono::milliseconds(m_config.monitorIntervalMs));
+        std::this_thread::sleep_for(std::chrono::milliseconds(m_config.hookConfig.monitorIntervalMs));
     }
 }
 
@@ -131,7 +161,10 @@ bool EquipmentSwapper::ValidateHook()
         // Find again with blocking call.
         Warning("Lost DSR process handle. Searching again...");
         std::unique_ptr<ManagedProcess> newProcess = ManagedProcess::WaitForProcess(
-            DSR_PROCESS_NAME, m_config.processSearchTimeoutMs, m_config.processSearchIntervalMs, m_stopFlag);
+            DSR_PROCESS_NAME,
+            m_config.hookConfig.processSearchTimeoutMs,
+            m_config.hookConfig.processSearchIntervalMs,
+            m_stopFlag);
 
         // Pass ownership `newProcess` to a new `DSRHook` instance (sole owner).
         m_dsrHook = make_unique<DSRHook>(std::move(newProcess));
@@ -143,9 +176,9 @@ bool EquipmentSwapper::ValidateHook()
         if (m_gameLoaded)
         {
             m_gameLoaded = false;
-            Warning(std::format("Game is not loaded. Checking again every {} ms...", m_config.gameLoadedIntervalMs));
+            Warning(std::format("Game is not loaded. Checking again every {} ms...", m_config.hookConfig.gameLoadedIntervalMs));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(m_config.gameLoadedIntervalMs));
+        std::this_thread::sleep_for(std::chrono::milliseconds(m_config.hookConfig.gameLoadedIntervalMs));
         return false; // do not check triggers
     }
 
@@ -188,37 +221,45 @@ void EquipmentSwapper::UpdateConnectedPlayers()
 
 void EquipmentSwapper::DecrementTriggerCooldowns()
 {
+    const int interval = m_config.hookConfig.monitorIntervalMs;
     // Decrement each timer countdown by monitor refresh interval:
-    for (SwapTrigger& trigger : m_config.leftWeaponTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
-    for (SwapTrigger& trigger : m_config.rightWeaponTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
-    for (SwapTrigger& trigger : m_config.headArmorTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
-    for (SwapTrigger& trigger : m_config.bodyArmorTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
-    for (SwapTrigger& trigger : m_config.armsArmorTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
-    for (SwapTrigger& trigger : m_config.legsArmorTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
-    for (SwapTrigger& trigger : m_config.ringTriggers)
-        trigger.DecrementAllCooldowns(m_config.monitorIntervalMs);
+    for (SwapTrigger& trigger : m_leftWeaponTriggers)
+        trigger.DecrementAllCooldowns(interval);
+    for (SwapTrigger& trigger : m_rightWeaponTriggers)
+        trigger.DecrementAllCooldowns(interval);
+    for (SwapTrigger& trigger : m_headArmorTriggers)
+        trigger.DecrementAllCooldowns(interval);
+    for (SwapTrigger& trigger : m_bodyArmorTriggers)
+        trigger.DecrementAllCooldowns(interval);
+    for (SwapTrigger& trigger : m_armsArmorTriggers)
+        trigger.DecrementAllCooldowns(interval);
+    for (SwapTrigger& trigger : m_legsArmorTriggers)
+        trigger.DecrementAllCooldowns(interval);
+    for (SwapTrigger& trigger : m_ringTriggers)
+        trigger.DecrementAllCooldowns(interval);
 }
 
-bool EquipmentSwapper::LoadConfig(const path& jsonConfigPath, EquipmentSwapperConfig& config)
+bool EquipmentSwapper::LoadConfig(const path& jsonConfigPath, EquipmentSwapConfig& config)
 {
-    // Load config from JSON and log settings.
-    if (!ParseTriggerJson(jsonConfigPath, config))
+
+    std::ifstream ifs(jsonConfigPath);
+    const nlohmann::json configJson = nlohmann::json::parse(ifs);
+
+    try
     {
-        Error(std::format("Failed to parse JSON file: {}", jsonConfigPath.string()));
+        DSREquipmentSwap::from_json(configJson, config);
+    }
+    catch (nlohmann::json::exception& e)
+    {
+        Error(std::format("Failed to parse JSON file: {}. Error: {}", jsonConfigPath.string(), e.what()));
         return false;
     }
     Info(std::format("Loaded settings and weapon swap triggers from file: {}", jsonConfigPath.string()));
-    Info(std::format("Process search timeout: {} ms", config.processSearchTimeoutMs));
-    Info(std::format("Process search interval: {} ms", config.processSearchIntervalMs));
-    Info(std::format("Monitor interval: {} ms", config.monitorIntervalMs));
-    Info(std::format("Game loaded interval: {} ms", config.gameLoadedIntervalMs));
-    Info(std::format("SpEffect trigger cooldown: {} ms", config.spEffectTriggerCooldownMs));
+    Info(std::format("Process search timeout: {} ms", config.hookConfig.processSearchTimeoutMs));
+    Info(std::format("Process search interval: {} ms", config.hookConfig.processSearchIntervalMs));
+    Info(std::format("Monitor interval: {} ms", config.hookConfig.monitorIntervalMs));
+    Info(std::format("Game loaded interval: {} ms", config.hookConfig.gameLoadedIntervalMs));
+    Info(std::format("SpEffect trigger cooldown: {} ms", config.hookConfig.spEffectTriggerCooldownMs));
     LogTriggers(config.leftWeaponTriggers, "Left-Hand Weapon Trigger");
     LogTriggers(config.rightWeaponTriggers, "Right-Hand Weapon Trigger");
     LogTriggers(config.headArmorTriggers, "Head Armor Trigger");

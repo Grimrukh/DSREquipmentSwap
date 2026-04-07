@@ -1,6 +1,6 @@
-#include <DSREquipmentSwap/Ring.hpp>
+#include "Ring.h"
 
-#include <DSREquipmentSwap/Tools.hpp>
+#include <DSREquipmentSwap/Tools.h>
 
 #include <Firelink/Process.h>
 
@@ -21,9 +21,10 @@ void RingSwapper::CheckRingSwapTriggers(
 {
     for (SwapTrigger& swapTrigger : triggers)
     {
-        if (swapTrigger.spEffectIDTrigger > 0)
+        const SwapTriggerConfig& config = swapTrigger.Config();
+        if (config.spEffectIDTrigger > 0)
         {
-            if (!contains(activeSpEffects, swapTrigger.spEffectIDTrigger))
+            if (!contains(activeSpEffects, config.spEffectIDTrigger))
                 continue; // SpEffect not active
             if (swapTrigger.GetCooldown(playerIndex) > 0)
                 continue; // SpEffect trigger still on cooldown for this swap
@@ -34,23 +35,23 @@ void RingSwapper::CheckRingSwapTriggers(
         {
             const int currentParamID = player.GetRing(slot);
 
-            if (swapTrigger.paramIDTrigger > 0 && currentParamID != swapTrigger.paramIDTrigger)
+            if (config.paramIDTrigger > 0 && !config.CheckParamIDTrigger(currentParamID))
                 continue; // ParamID does not match
 
-            const int newParamID = currentParamID + swapTrigger.paramIDOffset;
+            const int newParamID = config.GetTargetParamID(currentParamID);
 
             if (!player.SetRing(slot, newParamID))
-                Error(std::format("Ring ID trigger in slot {} failed: {}", slot, swapTrigger.ToString()));
+                Error(std::format("Ring ID trigger in slot {} failed: {}", slot, config.ToString()));
             else
-                Info(std::format("Ring ID trigger in slot {} succeeded: {}", slot, swapTrigger.ToString()));
+                Info(std::format("Ring ID trigger in slot {} succeeded: {}", slot, config.ToString()));
 
-            if (swapTrigger.spEffectIDTrigger > 0)
+            if (config.spEffectIDTrigger > 0)
             {
                 // Set SpEffect trigger cooldown.
                 swapTrigger.ResetCooldown(playerIndex, m_triggerCooldownMs);
             }
 
-            if (!swapTrigger.isPermanent)
+            if (!config.isPermanent)
             {
                 // Record new to old ring ID mapping. This may replace an existing temporary swap, which we discard.
                 m_tempRingSwaps[slot] = RingSwap(currentParamID, newParamID);

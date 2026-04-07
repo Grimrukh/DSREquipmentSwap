@@ -1,6 +1,6 @@
-#include <DSREquipmentSwap/Armor.hpp>
+#include "Armor.h"
 
-#include <DSREquipmentSwap/Tools.hpp>
+#include <DSREquipmentSwap/Tools.h>
 
 #include <Firelink/Process.h>
 
@@ -44,9 +44,10 @@ void ArmorSwapper::CheckArmorSwapTriggers(
 {
     for (SwapTrigger& swapTrigger : triggers)
     {
-        if (swapTrigger.spEffectIDTrigger > 0)
+        const SwapTriggerConfig& config = swapTrigger.Config();
+        if (config.spEffectIDTrigger > 0)
         {
-            if (!contains(activeSpEffects, swapTrigger.spEffectIDTrigger))
+            if (!contains(activeSpEffects, config.spEffectIDTrigger))
                 continue; // SpEffect not active
             if (swapTrigger.GetCooldown(playerIndex) > 0)
                 continue; // SpEffect trigger still on cooldown for this swap
@@ -54,23 +55,23 @@ void ArmorSwapper::CheckArmorSwapTriggers(
 
         const int currentParamID = player.GetArmor(type);
 
-        if (swapTrigger.paramIDTrigger > 0 && currentParamID != swapTrigger.paramIDTrigger)
+        if (config.paramIDTrigger > 0 && !config.CheckParamIDTrigger(currentParamID))
             continue; // ParamID does not match
 
-        const int newParamID = currentParamID + swapTrigger.paramIDOffset;
+        const int newParamID = config.GetTargetParamID(currentParamID);
 
         if (!player.SetArmor(type, newParamID))
-            Error(std::format("{} Armor ID trigger failed: {}", ArmorTypeToString.at(type), swapTrigger.ToString()));
+            Error(std::format("{} Armor ID trigger failed: {}", ArmorTypeToString.at(type), config.ToString()));
         else
-            Info(std::format("{} Armor ID trigger succeeded: {}", ArmorTypeToString.at(type), swapTrigger.ToString()));
+            Info(std::format("{} Armor ID trigger succeeded: {}", ArmorTypeToString.at(type), config.ToString()));
 
-        if (swapTrigger.spEffectIDTrigger > 0)
+        if (config.spEffectIDTrigger > 0)
         {
             // Set SpEffect trigger cooldown.
             swapTrigger.ResetCooldown(playerIndex, m_triggerCooldownMs);
         }
 
-        if (!swapTrigger.isPermanent)
+        if (!config.isPermanent)
         {
             // Record new to old weapon ID mapping. This may replace an existing temporary swap, which we discard.
             m_armorSwapState.SetTypeSwap(currentParamID, newParamID, type);

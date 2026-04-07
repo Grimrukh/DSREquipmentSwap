@@ -1,6 +1,7 @@
 #pragma once
 
-#include <DSREquipmentSwap/Config.hpp>
+#include <DSREquipmentSwap/Config.h>
+#include <DSREquipmentSwap/SwapTrigger.h>
 
 #include <FirelinkDSRHook/DSRPlayer.h>
 

@@ -1,16 +1,17 @@
 
 set(DSR_EQUIPMENT_SWAP_SOURCES
-    armor.hpp
-    armor.cpp
-    config.hpp
-    config.cpp
-    equipment.hpp
-    equipment.cpp
-    ring.hpp
-    ring.cpp
-    tools.hpp
-    weapon.hpp
-    weapon.cpp
+    Armor.h
+    Armor.cpp
+    Config.h
+    EquipmentSwapper.h
+    EquipmentSwapper.cpp
+    Ring.h
+    Ring.cpp
+    SwapTrigger.h
+    SwapTrigger.cpp
+    Tools.h
+    Weapon.h
+    Weapon.cpp
 )
 
 option(DSR_EQUIPMENT_SWAP_EXECUTABLE "Build DSREquipmentSwap as an executable instead of a DLL" OFF)
